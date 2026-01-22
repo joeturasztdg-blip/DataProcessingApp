@@ -15,7 +15,7 @@ import io
 import msoffcrypto
 from collections import Counter
 from PySide6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QMessageBox, QListWidget,
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QMessageBox, QListWidget, QRadioButton, QComboBox, QLineEdit,
     QLabel, QFileDialog, QInputDialog, QGroupBox, QTextEdit, QDialog, QAbstractItemView, QTableView, QMenu)
 from PySide6.QtCore import Qt, QAbstractTableModel, QMimeData, QModelIndex
 from PySide6.QtGui import QKeyEvent, QDrag, QCursor, QPainter, QColor
@@ -78,10 +78,10 @@ seed_dict = {
     ]),
     
     "7": ("Signal / Guide Dogs", [
-        ["Royal Mail Wholesale UCID1", "PO Box 72662", "", "", "London", "E1W 9LD", "", "", "", "", "Y", "1A"],
-        ["Client Services UCID1", "The Delivery Group", "Unit 2 Catalina Approach", "Omega South", "Warrington", "WA5 3UY", "", "", "", "", "Y", "1B"],
-        ["Royal Mail Wholesale UCID2", "PO Box 72662", "", "", "London", "E1W 9LD", "", "", "", "", "Y", "1A"],
-        ["Client Services UCID2", "The Delivery Group", "Unit 2 Catalina Approach", "Omega South", "Warrington", "WA5 3UY", "", "", "", "", "Y", "1B"],
+        ["Royal Mail Wholesale UCID1", "", "", "", "", "PO Box 72662", "", "", "","London", "", "", "", "E1W 9LD", "", "Y", "1A"],
+        ["Client Services UCID1", "", "", "", "", "The Delivery Group", "Unit 2 Catalina Approach", "Omega South", "", "Warrington", "", "", "", "WA5 3UY", "", "Y", "1B"],
+        ["Royal Mail Wholesale UCID2", "", "", "", "", "PO Box 72662", "", "", "", "London", "", "", "", "E1W 9LD", "", "Y", "1A"],
+        ["Client Services UCID2", "", "", "", "", "The Delivery Group", "Unit 2 Catalina Approach", "Omega South", "", "Warrington", "", "", "", "WA5 3UY", "", "Y", "1B"],
     ]),
 }
 
@@ -130,6 +130,167 @@ def color(text, c):
     return text
 
 # ---------------------------------------------------------------------------------------
+# Options schemas
+# ---------------------------------------------------------------------------------------
+CHANGE_DELIM_SCHEMA = [
+    {
+        "type": "radio",
+        "key": "delimiter",
+        "label": "Output Delimiter",
+        "options": [
+            ("Comma (,)", ","),
+            ("Semicolon (;)", ";"),
+            ("Tab", "\t"),
+            ("Pipe (|)", "|")
+        ],
+        "default": ","
+    }
+]
+
+CREATE_FILE_SCHEMA = [
+    {
+        "type": "toggle_select",
+        "key": "mmi",
+        "label": "MMI Settings",
+        "toggle": {"off": "None", "on": "Append MMI"},
+        "options": ["MaMS Leeds", "Scotts", "ProHub DMS"],
+        "extra": {
+            "Scotts": {
+                "type": "text",
+                "label": "Cell name",
+                "key": "cell_name"
+            }
+        },
+        "default": "off"
+    },
+    {
+        "type": "toggle_select",
+        "key": "seeds",
+        "label": "Seed Settings",
+        "toggle": {"off": "None", "on": "Append Seeds"},
+        "options": [
+            {"label": f"{k}: {seed_dict[k][0]}", "value": k}
+            for k in seed_dict
+        ],
+        "default": "off"
+    },
+    {
+        "type": "radio",
+        "key": "delimiter",
+        "label": "Output Delimiter",
+        "options": [
+            ("Comma (,)", ","),
+            ("Semicolon (;)", ";"),
+            ("Tab", "\t"),
+            ("Pipe (|)", "|")
+        ],
+        "default": ","
+    }
+]
+
+SPLIT_ZONES_SCHEMA = [
+    {
+        "type": "toggle_select",
+        "key": "seeds",
+        "label": "Seed Settings",
+        "toggle": {"off": "No seeds", "on": "Add seeds"},
+        "options": [
+            {"label": f"{k}: {split_seed_dict[k][0]}", "value": k}
+            for k in split_seed_dict
+        ],
+        "default": "off"
+    },
+    {
+        "type": "radio",
+        "key": "delimiter",
+        "label": "Output Delimiter",
+        "options": [
+            ("Comma (,)", ","),
+            ("Semicolon (;)", ";"),
+            ("Tab", "\t"),
+            ("Pipe (|)", "|")
+        ],
+        "default": ","
+    }
+]
+
+UPDATE_OUT_FILE_SCHEMA = [
+    {
+        "type": "radio_with_extras",
+        "key": "ucid_mode",
+        "label": "UCID Settings",
+        "options": [
+            {
+                "label": "1 UCID",
+                "value": "1",
+                "extras": [
+                    {
+                        "type": "text",
+                        "label": "UCID",
+                        "key": "ucid1"
+                    }
+                ]
+            },
+            {
+                "label": "2 UCIDs",
+                "value": "2",
+                "extras": [
+                    {
+                        "type": "text",
+                        "label": "UCID 1",
+                        "key": "ucid1"
+                    },
+                    {
+                        "type": "text",
+                        "label": "UCID 2",
+                        "key": "ucid2"
+                    }
+                ]
+            }
+        ],
+        "default": "2"
+    },
+    {
+        "type": "radio",
+        "key": "delimiter",
+        "label": "Output Delimiter",
+        "options": [
+            ("Comma (,)", ","),
+            ("Semicolon (;)", ";"),
+            ("Tab", "\t"),
+            ("Pipe (|)", "|")
+        ],
+        "default": ","
+    }
+]
+
+CREATE_ZIP_SCHEMA = [
+    {
+        "type": "radio_with_extras",
+        "key": "password_mode",
+        "label": "ZIP Password",
+        "options": [
+            {
+                "label": "Generate random password",
+                "value": "random",
+                "extras": []
+            },
+            {
+                "label": "Enter password",
+                "value": "manual",
+                "extras": [
+                    {
+                        "type": "text",
+                        "label": "Password",
+                        "key": "password"
+                    }
+                ]
+            }
+        ],
+        "default": "random"
+    }
+]
+# ---------------------------------------------------------------------------------------
 # Processing class
 # ---------------------------------------------------------------------------------------
 class Processor:
@@ -154,9 +315,6 @@ class Processor:
     # -------------------- cleansing --------------------
     def normalise_row(self, row):
         return ["" if c is None else str(c).strip() for c in row]
-
-    def is_empty(self, cell):
-        return cell == ""
 
     def cleanse_cell_string(self, x):
         if not isinstance(x, str):
@@ -432,61 +590,50 @@ class Processor:
         return self.process_loaded_rows(raw_lines)
 
     def load_excel(self, filename):
-        # FIRST: try normal Excel load
         try:
             raw_df = pd.read_excel(filename, header=None, dtype=str).fillna("")
             raw_lines = raw_df.values.tolist()
             return self.process_loaded_rows(raw_lines)
 
         except Exception as e:
-            # SECOND: check if file is actually encrypted
             try:
                 with open(filename, "rb") as f:
                     office_file = msoffcrypto.OfficeFile(f)
                     if not office_file.is_encrypted():
-                        # ❌ Not encrypted → real error, re-raise
                         raise
 
             except Exception:
-                # Not an encrypted file → bubble original error
                 raise
 
-            # THIRD: encrypted file path
             self.log("Encrypted file - password required", "yellow")
-
-            password, ok = QInputDialog.getText(
-                None,
-                "Password required",
-                "This Excel file is password protected.\nEnter password:"
-            )
+            password, ok = QInputDialog.getText(None, "Password required",
+                "This Excel file is password protected.\nEnter password:")
             if not ok or not password:
                 raise ValueError("Password entry cancelled.")
-
             try:
                 decrypted = io.BytesIO()
                 with open(filename, "rb") as f:
                     office_file = msoffcrypto.OfficeFile(f)
                     office_file.load_key(password=password)
                     office_file.decrypt(decrypted)
-
                 decrypted.seek(0)
                 raw_df = pd.read_excel(decrypted, header=None, dtype=str).fillna("")
                 raw_lines = raw_df.values.tolist()
                 return self.process_loaded_rows(raw_lines)
 
             except Exception as e2:
-                raise ValueError(
-                    "Could not open Excel file — incorrect password or unsupported encryption."
-                ) from e2
-
+                raise ValueError("Could not open Excel file — incorrect password or unsupported encryption.") from e2
 
     def load_file(self, filename):
+        display_name = os.path.basename(filename)
+        self.log(f"[LOAD] Loading file: {display_name}", "green")
+
         if self.is_csv(filename):
             return self.load_csv(filename)
         elif self.is_excel(filename):
             return self.load_excel(filename)
         else:
-            raise ValueError(f"Unsupported file type: {filename}")
+            raise ValueError(f"Unsupported file type: {display_name}")
 
     def save_csv(self, df, filename, has_header=True, delimiter=","):
         df.to_csv(filename, index=False, header=has_header, sep=delimiter)
@@ -609,7 +756,7 @@ class Processor:
             return False, col_names, padded
         
     @staticmethod
-    def update_ucid(df: pd.DataFrame, ucidMap: dict) -> pd.DataFrame:
+    def update_out_file(df: pd.DataFrame, ucidMap: dict) -> pd.DataFrame:
         pattern = re.compile(r"\b(UCID1|UCID2)\b")
         def replacer(match):
             key = match.group(1)
@@ -944,7 +1091,7 @@ class DragDropPandasModel(QAbstractTableModel):
                 self.df.iat[idx.row(), idx.column()] = ""
         self.layoutChanged.emit()
 # ---------------------------------------------------------------------------------------
-# Preview Dialog
+# Dialog
 # ---------------------------------------------------------------------------------------
 class PreviewDialog(QDialog):
     def __init__(self, dataframe, parent=None, title="Preview"):
@@ -1065,6 +1212,168 @@ class PreviewDialog(QDialog):
             "Clear",
             lambda: model.clear_selection(indexes))
         menu.exec(view.viewport().mapToGlobal(pos))
+
+class OptionsDialog(QDialog):
+    def __init__(self, schema, parent=None, title="Options"):
+        super().__init__(parent)
+        self.schema = schema
+        self.setWindowTitle(title)
+        self.resize(500, 500)
+        self.controls = {}
+        self.main_layout = QVBoxLayout(self)
+        for cfg in self.schema:
+            if cfg["type"] == "radio":
+                widget = self._build_radio_group(cfg)
+            elif cfg["type"] == "toggle_select":
+                widget = self._build_toggle_select(cfg)
+            elif cfg["type"] == "radio_with_extras":
+                widget = self._build_radio_with_extras(cfg)
+            else:
+                raise ValueError(f"Unsupported schema type: {cfg['type']}")
+            self.main_layout.addWidget(widget)
+        self.main_layout.addStretch()
+        self._add_dialog_buttons()
+
+    def _add_dialog_buttons(self):
+        btns = QHBoxLayout()
+        btns.addStretch()
+        btn_cancel = QPushButton("Cancel")
+        btn_ok = QPushButton("Continue")
+        btn_ok.setDefault(True)
+        btn_cancel.clicked.connect(self.reject)
+        btn_ok.clicked.connect(self.accept)
+        btns.addWidget(btn_cancel)
+        btns.addWidget(btn_ok)
+        self.main_layout.addLayout(btns)
+
+    def _get_checked_value(self, radios, default=None):
+        for r in radios:
+            if r.isChecked():
+                return r._value
+        return default
+
+    def _build_radio_buttons(self, layout, options, default=None):
+        radios = []
+        for opt in options:
+            if isinstance(opt, dict):
+                label = opt["label"]
+                value = opt["value"]
+            else:
+                label, value = opt
+
+            rb = QRadioButton(label)
+            rb._value = value
+            layout.addWidget(rb)
+            radios.append(rb)
+            if value == default:
+                rb.setChecked(True)
+        return radios
+
+    def _build_extras_controller(self, layout, extras_cfg, is_enabled_fn, get_value_fn):
+        extra_widgets = {}
+        for opt_value, extras in extras_cfg.items():
+            if not isinstance(extras, list):
+                extras = [extras]
+            widgets = []
+            for extra in extras:
+                if extra["type"] == "text":
+                    row = QHBoxLayout()
+                    lbl = QLabel(extra["label"])
+                    edit = QLineEdit()
+                    edit.setEnabled(False)
+                    row.addWidget(lbl)
+                    row.addWidget(edit)
+                    layout.addLayout(row)
+                    widgets.append((extra["key"], edit))
+            extra_widgets[opt_value] = widgets
+
+        def update_state():
+            enabled = is_enabled_fn()
+            current = get_value_fn()
+            for opt, widgets in extra_widgets.items():
+                for _, w in widgets:
+                    w.setEnabled(enabled and opt == current)
+
+        def read_extras(result):
+            current = get_value_fn()
+            for key, widget in extra_widgets.get(current, []):
+                result[key] = widget.text().strip()
+                
+        return update_state, read_extras
+
+    def _build_radio_group(self, cfg):
+        box = QGroupBox(cfg["label"])
+        layout = QVBoxLayout(box)
+        radios = self._build_radio_buttons(layout, cfg["options"], cfg.get("default"))
+        self.controls[cfg["key"]] = lambda: self._get_checked_value(radios)
+        return box
+
+    def _build_toggle_select(self, cfg):
+        box = QGroupBox(cfg["label"])
+        layout = QVBoxLayout(box)
+        rb_off = QRadioButton(cfg["toggle"]["off"])
+        rb_on = QRadioButton(cfg["toggle"]["on"])
+        default = cfg.get("default", "off")
+        rb_off.setChecked(default == "off")
+        rb_on.setChecked(default == "on")
+        layout.addWidget(rb_off)
+        row = QHBoxLayout()
+        row.addWidget(rb_on)
+        combo = QComboBox()
+        combo.setEnabled(False)
+
+        for opt in cfg["options"]:
+            if isinstance(opt, dict):
+                combo.addItem(opt["label"], opt["value"])
+            else:
+                combo.addItem(opt, opt)
+
+        row.addWidget(combo)
+        layout.addLayout(row)
+
+        update_extras, read_extras = self._build_extras_controller(layout, cfg.get("extra", {}),
+            is_enabled_fn=lambda: rb_on.isChecked(), get_value_fn=lambda: combo.currentData())
+
+        def update_state():
+            combo.setEnabled(rb_on.isChecked())
+            update_extras()
+
+        rb_on.toggled.connect(update_state)
+        combo.currentIndexChanged.connect(update_state)
+        update_state()
+
+        def read():
+            if not rb_on.isChecked():
+                return {"enabled": False}
+            result = {"enabled": True, "value": combo.currentData()}
+            read_extras(result)
+            return result
+        self.controls[cfg["key"]] = read
+        return box
+
+    def _build_radio_with_extras(self, cfg):
+        box = QGroupBox(cfg["label"])
+        layout = QVBoxLayout(box)
+        radios = self._build_radio_buttons(layout, cfg["options"], cfg.get("default"))
+        get_selected = lambda: self._get_checked_value(radios)
+        extras_cfg = {opt["value"]: opt.get("extras", []) for opt in cfg["options"] if opt.get("extras")}
+        update_extras, read_extras = self._build_extras_controller(layout, extras_cfg, is_enabled_fn=lambda: True, get_value_fn=get_selected)
+
+        for rb in radios:
+            rb.toggled.connect(update_extras)
+        update_extras()
+
+        def read():
+            result = {"value": get_selected()}
+            read_extras(result)
+            return result
+
+        self.controls[cfg["key"]] = read
+        return box
+
+    def get_results(self):
+        return {key: reader() for key, reader in self.controls.items()}
+
 # ---------------------------------------------------------------------------
 # Printing
 # ---------------------------------------------------------------------------
@@ -1173,8 +1482,7 @@ class BatchPdfPrintDialog(QDialog):
 
     def handle_print_next(self):
         batch_files = self.pdf_list[
-            self.batch_index : self.batch_index + self.batch_size
-        ]
+            self.batch_index : self.batch_index + self.batch_size]
 
         for i, pdf in enumerate(batch_files):
             if i >= len(SYSTEM_PRINTERS):
@@ -1228,13 +1536,13 @@ class MainWindow(QWidget):
         group.setLayout(group_layout)
 
         self.btn_change_delim = QPushButton("Change CSV Delimiter")
-        self.btn_create_seeds = QPushButton("Create file with optional seeds")
+        self.btn_create_file = QPushButton("Create file")
         self.btn_split_zones = QPushButton("Split mail into zones")
-        self.btn_update_ucid = QPushButton("Update UCID")
-        self.btn_create_zip = QPushButton("Create encrypted ZIP")
+        self.btn_update_out_file = QPushButton("Update .OUT file")
+        self.btn_create_zip = QPushButton("Create ZIP")
         self.btn_print_pdf = QPushButton("Print PDF")
 
-        for btn in (self.btn_change_delim, self.btn_create_seeds, self.btn_split_zones, self.btn_update_ucid, self.btn_create_zip, self.btn_print_pdf):
+        for btn in (self.btn_change_delim, self.btn_create_file, self.btn_split_zones, self.btn_update_out_file, self.btn_create_zip, self.btn_print_pdf):
             btn.setMinimumHeight(40)
             group_layout.addWidget(btn)
         layout.addWidget(group)
@@ -1243,14 +1551,13 @@ class MainWindow(QWidget):
         layout.addWidget(self.log, 1)
         self.processor = Processor(logger=self._log_to_widget)
         self.btn_change_delim.clicked.connect(self.handle_change_delim)
-        self.btn_create_seeds.clicked.connect(self.handle_create_seeds)
+        self.btn_create_file.clicked.connect(self.handle_create_file)
         self.btn_split_zones.clicked.connect(self.handle_split_zones)
-        self.btn_update_ucid.clicked.connect(self.handle_update_ucid)
+        self.btn_update_out_file.clicked.connect(self.handle_update_out_file)
         self.btn_create_zip.clicked.connect(self.handle_create_zip)
         self.btn_print_pdf.clicked.connect(self.handle_batch_print_pdfs)
         
         self.last_input_dir = os.getcwd()
-
         
     def _log_to_widget(self, msg, _colour=None):
         self.log.append(msg)
@@ -1307,30 +1614,12 @@ class MainWindow(QWidget):
             self.update_last_input_dir(path)
         return path or None
 
-    def clean_filename(self, infile: str) -> str:
-        base = os.path.basename(infile)
-        name, ext = os.path.splitext(base)
-        name = re.sub(r"[^\w\s&]", "", name)   # remove punctuation
-        name = name.replace("_", " ")         # turn underscores into spaces
-        name = re.sub(r"\s+", " ", name)      # Collapse multiple spaces
-        name = name.strip()                   # Trim
-        return f"{name}.csv"
-
     def make_file_writable(self, path: str):
         if os.path.exists(path):
             attrs = os.stat(path).st_mode
             if not (attrs & stat.S_IWRITE):
                 os.chmod(path, attrs | stat.S_IWRITE)
 
-    def ask_folder(self, title="Select folder"):
-        path = QFileDialog.getExistingDirectory(self, title, self._get_start_dir())
-        if path:
-            self.update_last_input_dir(path)
-        return path or None
-
-    def ask_text(self, title, label, default=""):
-        text, ok = QInputDialog.getText(self, title, label, text=default)
-        return text if ok else None
 
     def ask_choice(self, title, label, options):
         dialog = QInputDialog(self)
@@ -1339,47 +1628,11 @@ class MainWindow(QWidget):
         dialog.setComboBoxItems(options)
         ok = dialog.exec()
         return dialog.textValue() if ok else None
-
-    def ask_password_option(self):
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Password option")
-        layout = QVBoxLayout(dlg)
-        btn_random = QPushButton("Generate random password")
-        btn_enter  = QPushButton("Enter a password")
-        layout.addWidget(btn_random)
-        layout.addWidget(btn_enter)
-        btn_random.clicked.connect(lambda: dlg.done(1))
-        btn_enter.clicked.connect(lambda: dlg.done(2))
-        result = dlg.exec()
-        if result == 1:
-            return "random"
-        if result == 2:
-            return "enter"
-        return None
-
-    def ask_ucid_count(self):
-        dlg = QDialog(self)
-        dlg.setWindowTitle("How many UCIDs?")
-        layout = QHBoxLayout(dlg)
-        btn_random = QPushButton("1")
-        btn_enter  = QPushButton("2")
-        layout.addWidget(btn_random)
-        layout.addWidget(btn_enter)
-        btn_random.clicked.connect(lambda: dlg.done(1))
-        btn_enter.clicked.connect(lambda: dlg.done(2))
-        result = dlg.exec()
-        if result == 1:
-            return "1"
-        if result == 2:
-            return "2"
-        return None
-
-    def choose_delimiter(self):
-        delim_map = {"Comma": ",", "Semicolon": ";", "Tab": "\t", "Pipe": "|"}
-        choice = self.ask_choice("Choose delimiter", "Select output delimiter:", list(delim_map.keys()))
-        if choice is None:
-            return None
-        return delim_map[choice]
+    
+    def _unwrap_df(self, result, logs):
+        if isinstance(result, tuple):
+            return result[0]
+        return result
     #--------------------------------------------------------Change Delimiter--------------------------------------------------------
     def handle_change_delim(self):
         try:
@@ -1392,144 +1645,99 @@ class MainWindow(QWidget):
 
             self.make_file_writable(infile)
 
-            self.processor.log(f"[LOAD] Loading file: {infile}", "green")
             df, has_header = self.processor.load_file(infile)
             df, has_header = self.processor.analyze_and_log_header(df, has_header)
             df = self.processor.clean_header_names(df, has_header)
 
-            out_delim = self.choose_delimiter()
-            if out_delim is None:
+            dlg = OptionsDialog(CHANGE_DELIM_SCHEMA, parent=self, title="Change CSV Delimiter")
+            if dlg.exec() != QDialog.Accepted:
+                return
+            out_delim = dlg.get_results().get("delimiter")
+            if not out_delim:
                 return
 
             base = os.path.splitext(os.path.basename(infile))[0]
             default_name = f"{base}.csv"
-
-            outfile = self.ask_save_csv(
-                "Save re-delimited CSV as",
-                "CSV Files (*.csv);;All Files (*)",
-                defaultName=default_name
-            )
+            outfile = self.ask_save_csv("Save CSV as", "CSV Files (*.csv);;All Files (*)", defaultName=default_name)
             if not outfile:
                 return
-
-            self.processor.save_csv(
-                df,
-                outfile,
-                has_header=has_header,
-                delimiter=out_delim
-            )
-
+            self.processor.save_csv(df, outfile, has_header=has_header, delimiter=out_delim)
             self.processor.log("File created successfully.", "green")
 
         except Exception as e:
             self.show_error("Change delimiter failed", str(e))
-
     #--------------------------------------------------------Create File--------------------------------------------------------
-    def handle_create_seeds(self):
+    def handle_create_file(self):
+        logs = []
+        infile = self.ask_open_file("Choose CSV/TXT or Excel",
+                "CSV/TXT/Excel Files (*.csv *.txt *.xls *.xlsx);;All Files (*)")
+        if not infile:
+            return
         try:
-            infile = self.ask_open_file(
-                "Choose CSV/TXT or Excel file to load",
-                "CSV/TXT/Excel Files (*.csv *.txt *.xls *.xlsx);;All Files (*)"
-            )
-            if not infile:
-                return
-
-            self.make_file_writable(infile)
-
-            self.processor.log(f"[LOAD] Loading file: {infile}", "green")
             df, has_header = self.processor.load_file(infile)
             df, has_header = self.processor.analyze_and_log_header(df, has_header)
             df = self.processor.clean_header_names(df, has_header)
-
-            # Add MMI column
-            add_mmi_q = QMessageBox.question(
-                self,
-                "Add MMI?",
-                "Would you like to add an MMI column?",
-                    QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
-                    QMessageBox.Cancel)
-            if add_mmi_q == QMessageBox.Cancel:
-                return
-            elif add_mmi_q == QMessageBox.Yes:
-                mmi_choice = self.ask_choice(
-                    "Choose MMI",
-                    "Select information:",
-                    ["MaMS Leeds", "Scotts", "ProHub DMS"]
-                )
-                if not mmi_choice:
-                    return
-                if mmi_choice == "MaMS Leeds":
-                    df = self.processor.append_mmi(df, mmi_choice)
-                elif mmi_choice == "Scotts":
-                    cell_name, ok = QInputDialog.getText(
-                        self, "MMI", "Enter the cell name:")
-                    if not ok or not cell_name.strip():
-                        self.processor.log("MMI cancelled.", "yellow")
-                        return
-                    df = self.processor.append_mmi(df, mmi_choice, cell_name=cell_name)
-                elif mmi_choice == "ProHub DMS":
-                    df = self.processor.append_mmi(df, mmi_choice)
-
-            # Add seeds
-            add_seeds_q = QMessageBox.question(
-                self,
-                "Add seeds?",
-                "Would you like to add seed rows to this file?",
-                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
-                QMessageBox.Cancel)
-            seeds = None
-            if add_seeds_q == QMessageBox.Cancel:
-                return
-            elif add_seeds_q == QMessageBox.Yes:
-                keys = [f"{k}: {seed_dict[k][0]}" for k in seed_dict]
-                sel = self.ask_choice("Select seeds", "Choose seed service:", keys)
-                if not sel:
-                    return
-                sel_key = sel.split(":", 1)[0].strip()
-                seeds = seed_dict.get(sel_key, (None, None))[1]
-
-            if seeds:
-                df = self.processor.append_seeds(df, seeds)
-
-            # Preview
-            preview = PreviewDialog(df, self)
-            if preview.exec() != QDialog.Accepted:
-                return
-            df = preview.get_dataframe()
-
-            out_delim = self.choose_delimiter()
-            if out_delim is None:
-                return
-
-            base = os.path.splitext(os.path.basename(infile))[0]
-            default_filename = self.clean_filename(f"{base}.csv")
-
-            outfile = self.ask_save_csv(
-                "Save CSV as",
-                "CSV Files (*.csv);;All Files (*)",
-                defaultName=default_filename
-            )
-            if not outfile:
-                return
-
-            df = df.map(lambda x: str(x).replace("\n", " ").strip())
-            self.processor.save_csv(df, outfile, has_header=has_header, delimiter=out_delim)
-
-            self.processor.log("File created successfully.", "green")
-
         except Exception as e:
-            self.show_error("Create seeds failed", str(e))
+            QMessageBox.critical(self, "Error", str(e))
+            return
 
+        dlg = OptionsDialog(CREATE_FILE_SCHEMA, parent=self, title="Create File Options")
+        if dlg.exec() != QDialog.Accepted:
+            return
+        opts = dlg.get_results()
+        #--------------------MMI--------------------
+        mmi_opts = opts.get("mmi", {})
+        if mmi_opts.get("enabled"):
+            mmi_type = mmi_opts.get("value")
+            try:
+                if mmi_type == "Scotts":
+                    cell_name = mmi_opts.get("cell_name", "")
+                    if not cell_name:
+                        QMessageBox.warning(self, "Missing cell name", "Scotts MMI requires a cell name.")
+                        return
+                    df = self._unwrap_df(self.processor.append_mmi(df, "Scotts", cell_name=cell_name), logs)
+                else:
+                    df = self._unwrap_df(self.processor.append_mmi(df, mmi_type), logs)
+            except Exception as e:
+                QMessageBox.critical(self, "MMI Error", str(e))
+                return
+        #--------------------Seeds--------------------
+        seed_opts = opts.get("seeds", {})
+        if seed_opts.get("enabled"):
+            seed_key = seed_opts.get("value")
+            try:
+                seed_columns = seed_dict[seed_key][1]
+                df = self._unwrap_df(self.processor.append_seeds(df, seed_columns), logs)
+            except Exception as e:
+                QMessageBox.critical(self, "Seed Error", str(e))
+                return
+
+        preview = PreviewDialog(df, self)
+        if preview.exec() != QDialog.Accepted:
+            return
+        df = preview.get_dataframe()
+        df = df.map(lambda x: str(x).replace("\n", " ").strip())
+
+        delimiter = opts.get("delimiter", ",")
+        base = os.path.splitext(os.path.basename(infile))[0]
+        default_name = f"{base}.csv"
+        outfile = self.ask_save_csv("Save output file", "CSV Files (*.csv);;All Files (*)", defaultName=default_name)
+
+        if not outfile:
+            return
+        try:
+            df.to_csv(outfile, index=False, sep=delimiter)
+            self.processor.log("File created successfully.", "green")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Save Error", str(e))
     #--------------------------------------------------------Zonal Split--------------------------------------------------------
     def handle_split_zones(self):
         try:
-            infile = self.ask_open_file(
-                "Choose mail CSV/TXT or Excel to split",
-                "CSV/TXT/Excel Files (*.csv *.txt *.xls *.xlsx);;All Files (*)"
-            )
+            infile = self.ask_open_file("Choose mail CSV/TXT or Excel to split",
+                "CSV/TXT/Excel Files (*.csv *.txt *.xls *.xlsx);;All Files (*)")
             if not infile:
                 return
-
             self.make_file_writable(infile)
 
             self.processor.log(f"[LOAD] Loading file: {infile}", "green")
@@ -1544,22 +1752,17 @@ class MainWindow(QWidget):
             zonal, has_headerZ = self.processor.drop_useless_header(zonal, has_header)
             national, has_headerN = self.processor.drop_useless_header(national, has_header)
 
-            add_seeds_q = QMessageBox.question(
-                self,
-                "Add seeds?",
-                "Add seed rows to both outputs?",
-                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
-                QMessageBox.Cancel)
-            seeds = None
-            if add_seeds_q == QMessageBox.Cancel:
+            dlg = OptionsDialog(SPLIT_ZONES_SCHEMA, parent=self, title="Split Zones Options")
+            if dlg.exec() != QDialog.Accepted:
                 return
-            elif add_seeds_q == QMessageBox.Yes:
-                keys = [f"{k}: {split_seed_dict[k][0]}" for k in split_seed_dict]
-                sel = self.ask_choice("Select seeds", "Choose seed service:", keys)
-                if not sel:
-                    return
-                sel_key = sel.split(":", 1)[0].strip()
-                seeds = split_seed_dict.get(sel_key, (None, None))[1]
+            opts = dlg.get_results()
+            #--------------------Seeds--------------------
+            seed_opts = opts.get("seeds", {})
+            seeds = None
+
+            if seed_opts.get("enabled"):
+                seed_key = seed_opts.get("value")
+                seeds = split_seed_dict.get(seed_key, (None, None))[1]
 
             if seeds:
                 if isinstance(seeds, dict):
@@ -1581,151 +1784,101 @@ class MainWindow(QWidget):
                 return
             zonal = zpreview.get_dataframe()
 
-            out_delim = self.choose_delimiter()
-            if out_delim is None:
+            out_delim = opts.get("delimiter", ",")
+            if not out_delim:
                 return
-
             raw_base = os.path.splitext(os.path.basename(infile))[0]
             base = raw_base[:-4] + " " if raw_base.upper().endswith(".OUT") else raw_base
-
-            default_nat = self.clean_filename(f"{base} P1.csv")
-            default_zon = self.clean_filename(f"{base} P2.csv")
-
-            nat_out = self.ask_save_csv(
-                "Save National CSV (P1)",
-                "CSV Files (*.csv);;All Files (*)",
-                defaultName=default_nat
-            )
+            default_nat = (f"{base} P1.csv")
+            default_zon = (f"{base} P2.csv")
+            nat_out = self.ask_save_csv("Save National CSV (P1)", "CSV Files (*.csv);;All Files (*)", defaultName=default_nat)
             if not nat_out:
                 return
-
-            zon_out = self.ask_save_csv(
-                "Save Zonal CSV (P2)",
-                "CSV Files (*.csv);;All Files (*)",
-                defaultName=default_zon
-            )
+            zon_out = self.ask_save_csv("Save Zonal CSV (P2)", "CSV Files (*.csv);;All Files (*)", defaultName=default_zon)
             if not zon_out:
                 return
-
             national = national.map(lambda x: str(x).replace("\n", " ").strip())
             zonal = zonal.map(lambda x: str(x).replace("\n", " ").strip())
-
             self.processor.save_csv(national, nat_out, has_header=has_headerN, delimiter=out_delim)
             self.processor.save_csv(zonal, zon_out, has_header=has_headerZ, delimiter=out_delim)
 
             self.processor.log("Files created successfully.", "green")
-
         except Exception as e:
             self.show_error("Split mail failed", str(e))
-
     #--------------------------------------------------------Update UCID--------------------------------------------------------
-    def handle_update_ucid(self):
+    def handle_update_out_file(self):
         try:
-            infile = self.ask_open_file(
-                "Choose CSV/TXT or Excel to update UCID",
-                "CSV/TXT/Excel Files (*.csv *.txt *.xls *.xlsx);;All Files (*)"
-            )
+            infile = self.ask_open_file("Choose CSV/TXT to update",
+                "CSV/TXT/(*.OUT.csv *.OUT.txt);;All Files (*)")
             if not infile:
                 return
-
             self.make_file_writable(infile)
-
             self.processor.log(f"[LOAD] Loading file: {infile}", "green")
             df, has_header = self.processor.load_file(infile)
             df, has_header = self.processor.analyze_and_log_header(df, has_header)
             df = self.processor.clean_header_names(df, has_header)
 
-            opt = self.ask_ucid_count()
-            if opt is None:
+            dlg = OptionsDialog(UPDATE_OUT_FILE_SCHEMA, parent=self, title="Update UCID")
+            if dlg.exec() != QDialog.Accepted:
                 return
+            opts = dlg.get_results()
+            ucid_opts = opts["ucid_mode"]
 
-            if opt == "1":
-                ucid1 = self.ask_text("UCID replacement", "Enter UCID:", "")
-                if ucid1 is None:
-                    return
-                ucid2 = ucid1
-            else:
-                ucid1 = self.ask_text("UCID replacement", "Enter first UCID:", "")
-                if ucid1 is None:
-                    return
-                ucid2 = self.ask_text("UCID replacement", "Enter second UCID:", "")
-                if ucid2 is None:
-                    return
-
-            ucid_map = {
-                "UCID1": ucid1.strip(),
-                "UCID2": ucid2.strip()
-            }
-
-            df = self.processor.update_ucid(df, ucid_map)
+            ucid1 = ucid_opts.get("ucid1", "").strip()
+            ucid2 = ucid_opts.get("ucid2", ucid1).strip()
+            if not ucid1:
+                QMessageBox.warning(self, "Missing UCID", "Please enter a UCID value.")
+                return
+            ucid_map = {"UCID1": ucid1, "UCID2": ucid2}
+            df = self.processor.update_out_file(df, ucid_map)
 
             base = os.path.splitext(os.path.basename(infile))[0]
             default_name = f"{base}.csv"
-
-            outfile = self.ask_save_csv(
-                "Save UCID-updated CSV",
-                "CSV Files (*.csv);;All Files (*)",
-                defaultName=default_name
-            )
+            outfile = self.ask_save_csv("Save OUT file CSV", "CSV Files (*.csv);;All Files (*)", defaultName=default_name)
             if not outfile:
                 return
-
-            out_delim = self.choose_delimiter()
-            if out_delim is None:
-                return
-
-            self.processor.save_csv(df, outfile, has_header=has_header, delimiter=out_delim)
-
+            
+            delimiter = opts.get("delimiter", ",")
+            self.processor.save_csv(df, outfile, has_header=has_header, delimiter=delimiter)
             self.processor.log("UCID updated successfully.", "green")
-
         except Exception as e:
             self.show_error("Update UCID failed", str(e))
-
     #--------------------------------------------------------Create ZIP--------------------------------------------------------
     def handle_create_zip(self):
         try:
-            files = self.ask_open_files(
-                "Choose files to encrypt",
-                "All Files (*.*);;CSV Files (*.csv);;Text Files (*.txt);;Excel Files (*.xls *.xlsx)"
-            )
+            files = self.ask_open_files("Choose files to ZIP",
+                "All Files (*.*);;CSV Files (*.csv);;Text Files (*.txt);;Excel Files (*.xls *.xlsx)")
             if not files:
                 return
+            
+            dlg = OptionsDialog(CREATE_ZIP_SCHEMA, parent=self, title="ZIP Password")
+            if dlg.exec() != QDialog.Accepted:
+                return
+            opts = dlg.get_results()
+            pw_opts = opts["password_mode"]            
+            SAFE_CHARS = string.ascii_letters + string.digits + "-_@#$^!=+"
 
+            if pw_opts["value"] == "random":
+                password = ''.join(secrets.choice(SAFE_CHARS) for _ in range(16))
+            else:
+                password = pw_opts.get("password", "").strip()
+                if not password:
+                    QMessageBox.warning(self, "Missing password", "Please enter a password.")
+                    return
+                
             first_file = os.path.basename(files[0])
             base = '.'.join(first_file.split('.')[:-2]) or first_file.split('.')[0]
             default_zip_name = f"{base} DATA.zip"
-
-            zipfile = self.ask_save_csv(
-                "Save encrypted ZIP as",
-                "ZIP Files (*.zip);;All Files (*)",
-                defaultName=default_zip_name
-            )
+            zipfile = self.ask_save_csv("Save encrypted ZIP as", "ZIP Files (*.zip);;All Files (*)", defaultName=default_zip_name)
             if not zipfile:
                 return
-
-            choice = self.ask_password_option()
-            if choice is None:
-                return
-
-            SAFE_CHARS = string.ascii_letters + string.digits + "-_@#$^!=+"
-
-            if choice == "random":
-                password = ''.join(secrets.choice(SAFE_CHARS) for _ in range(16))
-            else:
-                password = self.ask_text("Enter password", "Enter ZIP password:", "")
-                if password is None:
-                    return
-
+            
             pw_txt_path = os.path.join(os.path.dirname(zipfile), "password.txt")
             try:
                 with open(pw_txt_path, "w", encoding="utf-8") as f:
                     f.write(password)
             except Exception as e:
-                QMessageBox.warning(
-                    self,
-                    "Warning",
-                    f"Could not save password to {pw_txt_path}:\n{e}"
-                )
+                QMessageBox.warning(self, "Warning", f"Could not save password to {pw_txt_path}:\n{e}")
 
             temp_dir = tempfile.mkdtemp(prefix="mail_pipeline_zip_")
             try:
@@ -1734,30 +1887,19 @@ class MainWindow(QWidget):
                         shutil.copy2(fpath, os.path.join(temp_dir, os.path.basename(fpath)))
                     except Exception as e:
                         self.processor.log(f"[WARN] Could not copy '{fpath}' -> {e}", "red")
-
                 self.processor.create_encrypted_zip(temp_dir, zipfile, password)
             finally:
                 shutil.rmtree(temp_dir, ignore_errors=True)
-
-            self.processor.log(
-                "Zip file saved successfully. Password saved in text file.",
-                "green"
-            )
-
+            self.processor.log("Zip file saved successfully. Password saved in text file.", "green")
         except FileNotFoundError as e:
             self.show_error("7-Zip not found", str(e))
         except Exception as e:
             self.show_error("Create ZIP failed", str(e))
-
     #--------------------------------------------------------Print Files--------------------------------------------------------
     def handle_batch_print_pdfs(self):
-        pdfs = self.ask_open_files(
-            "Select PDFs for batch print",
-            "PDF Files (*.pdf)"
-        )
+        pdfs = self.ask_open_files("Select PDFs for batch print", "PDF Files (*.pdf)")
         if not pdfs:
             return
-
         dlg = BatchPdfPrintDialog(pdfs, self)
         dlg.exec()
 # ---------------------------------------------------------------------------------------
