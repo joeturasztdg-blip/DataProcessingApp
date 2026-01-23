@@ -217,9 +217,13 @@ SPLIT_ZONES_SCHEMA = [
 UPDATE_OUT_FILE_SCHEMA = [
     {
         "type": "radio_with_extras",
-        "key": "ucid_mode",
-        "label": "UCID Settings",
+        "key": "ucid_updates",
+        "label": "UCID Updates",
         "options": [
+            {
+                "label": "None",
+                "value": "none"
+            },
             {
                 "label": "1 UCID",
                 "value": "1",
@@ -227,7 +231,8 @@ UPDATE_OUT_FILE_SCHEMA = [
                     {
                         "type": "text",
                         "label": "UCID",
-                        "key": "ucid1"
+                        "key": "ucid1",
+                        "indent": True
                     }
                 ]
             },
@@ -238,18 +243,33 @@ UPDATE_OUT_FILE_SCHEMA = [
                     {
                         "type": "text",
                         "label": "UCID 1",
-                        "key": "ucid1"
+                        "key": "ucid1",
+                        "indent": True
                     },
                     {
                         "type": "text",
                         "label": "UCID 2",
-                        "key": "ucid2"
+                        "key": "ucid2",
+                        "indent": True
                     }
                 ]
             }
         ],
-        "default": "2"
+        "default": "none"
     },
+
+    {
+        "type": "radio",
+        "key": "barcode_padding",
+        "label": "Barcode Padding",
+        "options": [
+            ("None", "none"),
+            ("X", "X"),
+            ("Z", "Z"),
+        ],
+        "default": "none"
+    },
+
     {
         "type": "radio",
         "key": "delimiter",
@@ -263,6 +283,7 @@ UPDATE_OUT_FILE_SCHEMA = [
         "default": ","
     }
 ]
+
 
 CREATE_ZIP_SCHEMA = [
     {
@@ -425,7 +446,7 @@ class Processor:
             if not cell_name:
                 raise ValueError("Cell name is required for Scotts MMI")
             col_a = df.columns[0]
-            df[new_col_name] = ("Y|" + df[col_a].astype(str).str.strip() + "|" + cell_name.strip())
+            df[new_col_name] = (df[col_a].astype(str).str.strip() + "|" + cell_name.strip())
         elif mmi_choice == "ProHub DMS":
             col_a = df.columns[0]
             col_b = df.columns[1] if len(df.columns) > 1 else df.columns[0]
@@ -784,6 +805,24 @@ class Processor:
         zonal = df[is_zonal.fillna(False)]
         national = df[~is_zonal.fillna(False)]
         return zonal.copy(), national.copy()
+    
+    @staticmethod
+    def apply_barcode_padding(
+        df: pd.DataFrame,
+        padding_char: str,
+        barcode_column: str = "BarcodeData"
+    ) -> pd.DataFrame:
+        if barcode_column not in df.columns:
+            return df
+
+        def pad(value):
+            s = str(value)
+            if not s:
+                return s
+            return s[:-1] + padding_char
+        df[barcode_column] = df[barcode_column].map(pad)
+        return df
+
 # ---------------------------------------------------------------------------------------
 # Drag & Drop GUI code
 # ---------------------------------------------------------------------------------------
@@ -1217,22 +1256,25 @@ class OptionsDialog(QDialog):
     def __init__(self, schema, parent=None, title="Options"):
         super().__init__(parent)
         self.schema = schema
+        self.controls = {}
         self.setWindowTitle(title)
         self.resize(500, 500)
-        self.controls = {}
+
         self.main_layout = QVBoxLayout(self)
-        for cfg in self.schema:
-            if cfg["type"] == "radio":
-                widget = self._build_radio_group(cfg)
-            elif cfg["type"] == "toggle_select":
-                widget = self._build_toggle_select(cfg)
-            elif cfg["type"] == "radio_with_extras":
-                widget = self._build_radio_with_extras(cfg)
-            else:
-                raise ValueError(f"Unsupported schema type: {cfg['type']}")
-            self.main_layout.addWidget(widget)
+        self._build_ui()
         self.main_layout.addStretch()
         self._add_dialog_buttons()
+    # ---------------- UI Assembly ----------------
+    def _build_ui(self):
+        builders = {
+            "radio": self._build_radio_group,
+            "toggle_select": self._build_toggle_select,
+            "radio_with_extras": self._build_radio_with_extras}
+        for cfg in self.schema:
+            builder = builders.get(cfg["type"])
+            if not builder:
+                raise ValueError(f"Unsupported schema type: {cfg['type']}")
+            self.main_layout.addWidget(builder(cfg))
 
     def _add_dialog_buttons(self):
         btns = QHBoxLayout()
@@ -1245,37 +1287,32 @@ class OptionsDialog(QDialog):
         btns.addWidget(btn_cancel)
         btns.addWidget(btn_ok)
         self.main_layout.addLayout(btns)
-
+    # ---------------- Helpers ----------------
     def _get_checked_value(self, radios, default=None):
-        for r in radios:
-            if r.isChecked():
-                return r._value
-        return default
+        return next((r._value for r in radios if r.isChecked()), default)
+
+    def _create_radio(self, label, value, checked=False):
+        rb = QRadioButton(label)
+        rb._value = value
+        rb.setChecked(checked)
+        return rb
 
     def _build_radio_buttons(self, layout, options, default=None):
         radios = []
         for opt in options:
-            if isinstance(opt, dict):
-                label = opt["label"]
-                value = opt["value"]
-            else:
-                label, value = opt
-
-            rb = QRadioButton(label)
-            rb._value = value
+            label, value = (opt["label"], opt["value"]) if isinstance(opt, dict) else opt
+            rb = self._create_radio(label, value, value == default)
             layout.addWidget(rb)
             radios.append(rb)
-            if value == default:
-                rb.setChecked(True)
         return radios
-
-    def _build_extras_controller(self, layout, extras_cfg, is_enabled_fn, get_value_fn):
+    # ---------------- Extras Controller ----------------
+    def _build_extras_controller(self, layout, extras_cfg, is_enabled_fn, get_value_fn, layout_override=None):
         extra_widgets = {}
+
         for opt_value, extras in extras_cfg.items():
-            if not isinstance(extras, list):
-                extras = [extras]
             widgets = []
-            for extra in extras:
+            target_layout = layout_override.get(opt_value, layout) if layout_override else layout
+            for extra in extras if isinstance(extras, list) else [extras]:
                 if extra["type"] == "text":
                     row = QHBoxLayout()
                     lbl = QLabel(extra["label"])
@@ -1283,7 +1320,7 @@ class OptionsDialog(QDialog):
                     edit.setEnabled(False)
                     row.addWidget(lbl)
                     row.addWidget(edit)
-                    layout.addLayout(row)
+                    target_layout.addLayout(row)
                     widgets.append((extra["key"], edit))
             extra_widgets[opt_value] = widgets
 
@@ -1295,12 +1332,11 @@ class OptionsDialog(QDialog):
                     w.setEnabled(enabled and opt == current)
 
         def read_extras(result):
-            current = get_value_fn()
-            for key, widget in extra_widgets.get(current, []):
+            for key, widget in extra_widgets.get(get_value_fn(), []):
                 result[key] = widget.text().strip()
                 
         return update_state, read_extras
-
+    # ---------------- Builders ----------------
     def _build_radio_group(self, cfg):
         box = QGroupBox(cfg["label"])
         layout = QVBoxLayout(box)
@@ -1311,28 +1347,26 @@ class OptionsDialog(QDialog):
     def _build_toggle_select(self, cfg):
         box = QGroupBox(cfg["label"])
         layout = QVBoxLayout(box)
-        rb_off = QRadioButton(cfg["toggle"]["off"])
-        rb_on = QRadioButton(cfg["toggle"]["on"])
-        default = cfg.get("default", "off")
-        rb_off.setChecked(default == "off")
-        rb_on.setChecked(default == "on")
+        rb_off = self._create_radio(cfg["toggle"]["off"], "off")
+        rb_on = self._create_radio(cfg["toggle"]["on"], "on")
+        rb_off.setChecked(cfg.get("default", "off") == "off")
+        rb_on.setChecked(cfg.get("default", "off") == "on")
         layout.addWidget(rb_off)
         row = QHBoxLayout()
         row.addWidget(rb_on)
+
         combo = QComboBox()
-        combo.setEnabled(False)
-
         for opt in cfg["options"]:
-            if isinstance(opt, dict):
-                combo.addItem(opt["label"], opt["value"])
-            else:
-                combo.addItem(opt, opt)
-
+            label, value = (opt["label"], opt["value"]) if isinstance(opt, dict) else (opt, opt)
+            combo.addItem(label, value)
         row.addWidget(combo)
         layout.addLayout(row)
 
-        update_extras, read_extras = self._build_extras_controller(layout, cfg.get("extra", {}),
-            is_enabled_fn=lambda: rb_on.isChecked(), get_value_fn=lambda: combo.currentData())
+        update_extras, read_extras = self._build_extras_controller(
+            layout,
+            cfg.get("extra", {}),
+            is_enabled_fn=rb_on.isChecked,
+            get_value_fn=combo.currentData)
 
         def update_state():
             combo.setEnabled(rb_on.isChecked())
@@ -1348,16 +1382,40 @@ class OptionsDialog(QDialog):
             result = {"enabled": True, "value": combo.currentData()}
             read_extras(result)
             return result
+
         self.controls[cfg["key"]] = read
         return box
 
     def _build_radio_with_extras(self, cfg):
         box = QGroupBox(cfg["label"])
         layout = QVBoxLayout(box)
-        radios = self._build_radio_buttons(layout, cfg["options"], cfg.get("default"))
+        radios = []
+        extras_layout_map = {}
+        for opt in cfg["options"]:
+            rb = self._create_radio(opt["label"], opt["value"])
+            layout.addWidget(rb)
+            radios.append(rb)
+            if opt.get("extras"):
+                spacer = QWidget()
+                spacer_layout = QVBoxLayout(spacer)
+                spacer_layout.setContentsMargins(25, 0, 0, 0)
+                layout.addWidget(spacer)
+                extras_layout_map[opt["value"]] = spacer_layout
+        default = cfg.get("default")
+        for rb in radios:
+            rb.setChecked(rb._value == default)
         get_selected = lambda: self._get_checked_value(radios)
-        extras_cfg = {opt["value"]: opt.get("extras", []) for opt in cfg["options"] if opt.get("extras")}
-        update_extras, read_extras = self._build_extras_controller(layout, extras_cfg, is_enabled_fn=lambda: True, get_value_fn=get_selected)
+        extras_cfg = {
+            opt["value"]: opt["extras"]
+            for opt in cfg["options"]
+            if opt.get("extras")}
+
+        update_extras, read_extras = self._build_extras_controller(
+            layout,
+            extras_cfg,
+            is_enabled_fn=lambda: True,
+            get_value_fn=get_selected,
+            layout_override=extras_layout_map)
 
         for rb in radios:
             rb.toggled.connect(update_extras)
@@ -1370,9 +1428,9 @@ class OptionsDialog(QDialog):
 
         self.controls[cfg["key"]] = read
         return box
-
+    
     def get_results(self):
-        return {key: reader() for key, reader in self.controls.items()}
+        return {key: getter() for key, getter in self.controls.items()}
 
 # ---------------------------------------------------------------------------
 # Printing
@@ -1805,7 +1863,7 @@ class MainWindow(QWidget):
             self.processor.log("Files created successfully.", "green")
         except Exception as e:
             self.show_error("Split mail failed", str(e))
-    #--------------------------------------------------------Update UCID--------------------------------------------------------
+    #--------------------------------------------------------Update Out File--------------------------------------------------------
     def handle_update_out_file(self):
         try:
             infile = self.ask_open_file("Choose CSV/TXT to update",
@@ -1818,19 +1876,35 @@ class MainWindow(QWidget):
             df, has_header = self.processor.analyze_and_log_header(df, has_header)
             df = self.processor.clean_header_names(df, has_header)
 
-            dlg = OptionsDialog(UPDATE_OUT_FILE_SCHEMA, parent=self, title="Update UCID")
+            dlg = OptionsDialog(UPDATE_OUT_FILE_SCHEMA, parent=self, title="Update Out File")
             if dlg.exec() != QDialog.Accepted:
                 return
             opts = dlg.get_results()
-            ucid_opts = opts["ucid_mode"]
+            #--------------------Update UCIDs--------------------
+            ucid_opts = opts.get("ucid_updates", {})
+            ucid_mode = ucid_opts.get("value", "none")
 
-            ucid1 = ucid_opts.get("ucid1", "").strip()
-            ucid2 = ucid_opts.get("ucid2", ucid1).strip()
-            if not ucid1:
-                QMessageBox.warning(self, "Missing UCID", "Please enter a UCID value.")
-                return
-            ucid_map = {"UCID1": ucid1, "UCID2": ucid2}
-            df = self.processor.update_out_file(df, ucid_map)
+            ucidMap = {}
+
+            if ucid_mode == "1":
+                if ucid_opts.get("ucid1"):
+                    ucidMap["UCID1"] = ucid_opts["ucid1"]
+
+            elif ucid_mode == "2":
+                if ucid_opts.get("ucid1"):
+                    ucidMap["UCID1"] = ucid_opts["ucid1"]
+                if ucid_opts.get("ucid2"):
+                    ucidMap["UCID2"] = ucid_opts["ucid2"]
+
+            # Only apply if we actually have UCIDs
+            if ucidMap:
+                df = Processor.update_out_file(df, ucidMap)
+
+            #--------------------Barcode Padding--------------------
+            barcode_opts = opts.get("barcode_padding", {})
+            padding_choice = opts.get("barcode_padding", "none")
+            if padding_choice != "none":
+                df = Processor.apply_barcode_padding(df, padding_choice)
 
             base = os.path.splitext(os.path.basename(infile))[0]
             default_name = f"{base}.csv"
