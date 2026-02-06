@@ -12,13 +12,21 @@ Package and export processed files
 Log actions and diagnostics during processing
 
 Project layout:
+
 data_processing_app/
+
 ├── main.py        – entry point for the application
+
 ├── config/        – constants, schemas, and seed data
+
 ├── gui/           – windows, dialogs, and UI models
+
 ├── processing/   – core processing logic
+
 ├── utils/        – shared helpers used across the app
+
 └── README.md
+
 
 Requirements:
 Python 3.10 or newer
