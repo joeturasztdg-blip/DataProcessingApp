@@ -69,7 +69,7 @@ DATA_PROCESSING_APP/
     
 │    ├── pdf_utils.py
     
-    └── row_utils.py
+│    └── row_utils.py
     
 
 Requirements:
