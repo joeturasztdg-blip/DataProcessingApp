@@ -13,20 +13,35 @@ Log actions and diagnostics during processing
 
 Project layout:
 
-data_processing_app/
-
-├── main.py        – entry point for the application
-
-├── config/        – constants, schemas, and seed data
-
-├── gui/           – windows, dialogs, and UI models
-
-├── processing/   – core processing logic
-
-├── utils/        – shared helpers used across the app
-
-└── README.md
-
+DATA_PROCESSING_APP/
+├── main.py
+├── config/
+│   ├── __init__.py
+│   ├── constants.py
+│   ├── schemas.py
+│   └── seeds.py
+├── gui/
+│   ├── __init__.py
+│   ├── dialogs.py
+│   ├── main_window.py
+│   ├── models.py
+│   ├── password_broker.py
+│   ├── progress.py
+│   └── table.py
+├── processing/
+│   ├── __init__.py
+│   ├── cleansing.py
+│   ├── headers.py
+│   ├── loading.py
+│   ├── packaging.py
+│   └── transforms.py
+└── utils/
+    ├── __init__.py
+    ├── col_utils.py
+    ├── formatting.py
+    ├── logging_adapter.py
+    ├── pdf_utils.py
+    └── row_utils.py
 
 Requirements:
 Python 3.10 or newer
