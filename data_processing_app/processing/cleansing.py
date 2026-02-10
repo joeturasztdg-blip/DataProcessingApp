@@ -67,25 +67,35 @@ class DataCleaner:
             self.logger.log(
                 f"Removed {self.cleansing_stats['removed_chars']} hidden characters "
                 f"from {self.cleansing_stats['modified_cells']} cells.",
-                "yellow"
-            )
-
+                "yellow")
         if before_rows > after_rows:
             self.logger.log(f"Dropped {before_rows - after_rows} empty rows", "yellow")
 
         if before_cols > after_cols:
             self.logger.log(f"Dropped {before_cols - after_cols} empty columns.", "yellow")
-
         return df
-
-    def clean_header_names(self, df: pd.DataFrame, has_header: bool) -> pd.DataFrame:
+        
+    def clean_header_names(self, df: pd.DataFrame, has_header: bool, mode: str = "none") -> pd.DataFrame:
         if not has_header:
             return df
+        
+        mode = (mode or "none").lower().strip()
         original = list(df.columns)
-        cleaned = [
-            c.replace("_", " ").strip() if isinstance(c, str) else c
-            for c in original]
+
+        if mode == "underscore":
+            cleaned = [
+                c.replace("_", " ").strip() if isinstance(c, str) else c
+                for c in original]
+        elif mode == "dot":
+            cleaned = [
+                c.replace(".", " ").strip() if isinstance(c, str) else c
+                for c in original]
+        else:
+            cleaned = original[:]
+
         if original != cleaned:
-            self.logger.log("[HEADER] Replaced underscores with spaces in column names.", "yellow")
+            msg = {"underscore": "Replaced underscores with spaces",
+                    "dot": "Replaced dots with spaces",}.get(mode, "Cleaned column names")
+            self.logger.log(f"[HEADER] {msg}.", "yellow")
             df.columns = cleaned
         return df

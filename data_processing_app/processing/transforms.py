@@ -21,12 +21,37 @@ class DomainTransforms:
 
         return pd.concat([df, seed_df], ignore_index=True)
 
-    def append_mmi(self, df, choice, cell_name=None, new_col="MMI"):
+    def append_mmi(self, df: pd.DataFrame, choice, cell_name=None, new_col="MMI"):
         if choice == "Coopers":
-            df[new_col] = "Y|" + df.iloc[:,0].astype(str) + "|" + df.iloc[:,2].astype(str)
+            col_a = df.columns[0]
+            col_c = df.columns[2] if len(df.columns) > 2 else df.columns[0]
+            df[new_col] = (
+                "Y|" + df[col_a].astype(str).str.strip()
+                + "|" + df[col_c].astype(str).str.strip()
+            )
+
         elif choice == "Scotts":
-            df[new_col] = df.iloc[:,0].astype(str) + "|" + cell_name
+            if not cell_name:
+                raise ValueError("Cell name is required for Scotts MMI")
+            col_a = df.columns[0]
+            df[new_col] = df[col_a].astype(str).str.strip() + "|" + cell_name.strip()
+
+        elif choice == "ProHub DMS":
+            col_a = df.columns[0]
+            col_b = df.columns[1] if len(df.columns) > 1 else df.columns[0]
+            col_g = df.columns[6] if len(df.columns) > 6 else df.columns[0]
+            df[new_col] = (
+                df[col_g].astype(str).str.strip().str[:-12]
+                + "00"
+                + df[col_a].astype(str).str.strip()
+                + df[col_b].astype(str).str.strip().str[1:]
+            )
+
+        else:
+            raise ValueError(f"Unknown MMI choice: {choice}")
+
         return df
+
 
     def remove_cols(self, df):
         return df.drop(columns=[

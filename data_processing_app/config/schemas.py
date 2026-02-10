@@ -17,6 +17,17 @@ CHANGE_DELIM_SCHEMA = [
 
 CREATE_FILE_SCHEMA = [
     {
+    "key": "header_cleaning",
+    "type": "radio",
+    "label": "Header cleaning",
+    "default": "none",
+    "options": [
+        {"label": "None", "value": "none"},
+        {"label": "Remove _", "value": "underscore"},
+        {"label": "Remove .", "value": "dot"},
+    ],
+    },
+    {
         "type": "toggle_select",
         "key": "mmi",
         "label": "MMI Settings",

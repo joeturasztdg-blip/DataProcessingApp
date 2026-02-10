@@ -43,18 +43,28 @@ class HeaderDetector:
             df = df.iloc[1:].reset_index(drop=True)
             return df, False
         return df, True
-
+    
     def analyze_and_log_header(self, df, has_header):
         raw = self.last_header_result
-        placeholder = re.compile(r"^Column\d+$", re.I)
         col_names = [str(c).strip() for c in df.columns]
+
+        if raw == "duplicate" and has_header and len(df) > 0:
+            self.logger.log("[HEADER] Duplicate header detected.", "yellow")
+
+            def row_matches_header(row_vals):
+                return [c.lower() for c in col_names] == [
+                    str(v).strip().lower() for v in row_vals]
+
+            while len(df) > 0 and row_matches_header(df.iloc[0].tolist()):
+                df = df.iloc[1:].reset_index(drop=True)
+                self.logger.log("[HEADER] Dropped additional duplicate header row.", "yellow")
 
         if raw == "real":
             self.logger.log("[HEADER] Real header confirmed.", "green")
         elif raw == "partial":
             self.logger.log("[HEADER] Partial header applied.", "yellow")
         elif raw == "duplicate":
-            self.logger.log("[HEADER] Duplicate header detected.", "yellow")
+            pass
         elif not has_header:
             self.logger.log("[HEADER] No header detected.", "yellow")
 
@@ -62,11 +72,7 @@ class HeaderDetector:
             return self.drop_useless_header(df, has_header)
 
         return df, has_header
-
-    
-
     # ---------------- heuristics ----------------
-
     def _detect_partial_header(self, r1, r3):
         score = 0
 

@@ -1,9 +1,11 @@
+import re
 import pandas as pd
 import pickle
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt, QAbstractTableModel, QMimeData, QModelIndex
 
+_DUP_RE = re.compile(r"^(.*?)(?: \((\d+)\))?$")
 
 class DragDropPandasModel(QAbstractTableModel):
     MIME_TYPE = "application/x-pandas-cell-block"
@@ -51,19 +53,51 @@ class DragDropPandasModel(QAbstractTableModel):
         if orientation == Qt.Orientation.Horizontal:
             return str(self.df.columns[section])
         return str(section + 1)
+
+    def _next_unique_name(self, desired: str, col_being_renamed: int) -> str:
+        """
+        Return a unique column name based on desired, excluding the column being renamed.
+        """
+        desired = str(desired).strip()
+        if not desired:
+            desired = "Column"
+
+        existing = [str(c) for i, c in enumerate(self.df.columns) if i != col_being_renamed]
+        existing_set = set(existing)
+
+        if desired not in existing_set:
+            return desired
+
+        # If user typed "Beep (3)", treat base as "Beep"
+        m = _DUP_RE.match(desired)
+        base = (m.group(1) or "").strip() or desired
+
+        # Find next available suffix
+        n = 1
+        while True:
+            candidate = f"{base} ({n})"
+            if candidate not in existing_set and candidate != desired:
+                return candidate
+            n += 1
+
     
     def rename_column(self, col: int, new_name: str):
-        new_name = new_name.strip()
+        new_name = (new_name or "").strip()
         if not new_name:
             return
+
         current = str(self.df.columns[col])
-        if current == new_name:
+        final_name = self._next_unique_name(new_name, col)
+
+        if current == final_name:
             return
+
         self.push_undo_state()
-        self.df.columns = [
-            new_name if i == col else c
-            for i, c in enumerate(self.df.columns)]
+        cols = [str(c) for c in self.df.columns]
+        cols[col] = final_name
+        self.df.columns = cols
         self.headerDataChanged.emit(Qt.Orientation.Horizontal, col, col)
+
     
     def insert_row_above(self, row: int):
         self.push_undo_state()
@@ -76,14 +110,18 @@ class DragDropPandasModel(QAbstractTableModel):
         
     def insert_row_below(self, row: int):
         self.insert_row_above(row + 1)
-            
-    def delete_row(self, row: int):
-        if self.rowCount() <= 1:
+        
+    def insert_rows_above(self, row: int, count: int = 1):
+        count = int(count)
+        if count <= 0:
             return
         self.push_undo_state()
-        self.beginRemoveRows(QModelIndex(), row, row)
-        self.df = self.df.drop(self.df.index[row]).reset_index(drop=True)
-        self.endRemoveRows()
+        empty = pd.DataFrame([[""] * self.columnCount()] * count, columns=self.df.columns)
+        self.df = pd.concat([self.df.iloc[:row], empty, self.df.iloc[row:]], ignore_index=True)
+        self.layoutChanged.emit()
+
+    def insert_rows_below(self, row: int, count: int = 1):
+        self.insert_rows_above(row + 1, count)
 
     def insert_column_left(self, col: int):
         self.push_undo_state()
@@ -94,14 +132,46 @@ class DragDropPandasModel(QAbstractTableModel):
 
     def insert_column_right(self, col: int):
         self.insert_column_left(col + 1)
-
-    def delete_column(self, col: int):
-        if self.columnCount() <= 1:
+        
+    def insert_columns_left(self, col: int, count: int = 1):
+        count = int(count)
+        if count <= 0:
             return
         self.push_undo_state()
-        self.beginRemoveColumns(QModelIndex(), col, col)
-        self.df.drop(self.df.columns[col], axis=1, inplace=True)
-        self.endRemoveColumns()
+        for i in range(count):
+            name = f"Column{self.columnCount() + 1}"
+            self.df.insert(col + i, name, "")
+        self.layoutChanged.emit()
+
+    def insert_columns_right(self, col: int, count: int = 1):
+        self.insert_columns_left(col + 1, count)
+
+    def delete_rows(self, rows):
+        rows = sorted({int(r) for r in rows})
+        if not rows:
+            return
+        if self.rowCount() <= 1:
+            return
+        if len(rows) >= self.rowCount():
+            rows = rows[:-1]
+        self.push_undo_state()
+        self.beginResetModel()
+        self.df = self.df.drop(index=rows).reset_index(drop=True)
+        self.endResetModel()
+
+    def delete_columns(self, cols):
+        cols = sorted({int(c) for c in cols})
+        if not cols:
+            return
+        if self.columnCount() <= 1:
+            return
+        if len(cols) >= self.columnCount():
+            cols = cols[:-1]
+        self.push_undo_state()
+        self.beginResetModel()
+        drop_labels = [self.df.columns[c] for c in cols if 0 <= c < self.columnCount()]
+        self.df = self.df.drop(columns=drop_labels)
+        self.endResetModel()
 
     def mimeTypes(self):
         return [self.MIME_TYPE]
@@ -160,11 +230,6 @@ class DragDropPandasModel(QAbstractTableModel):
 
     def get_dataframe(self):
         return self.df.copy()
-    
-    def mousePressEvent(self, event):
-        self._context_index = self.indexAt(event.pos())
-        self._context_pos = event.pos()
-        super().mousePressEvent(event)
 
     def push_undo_state(self):
         self.undo_stack.append(self.df.copy())
