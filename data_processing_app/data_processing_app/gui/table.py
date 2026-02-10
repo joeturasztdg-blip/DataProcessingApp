@@ -1,0 +1,250 @@
+from __future__ import annotations
+from PySide6.QtWidgets import QAbstractItemView, QTableView
+from PySide6.QtCore import Qt, QRect, QPoint, QTimer
+from PySide6.QtGui import QDrag, QPainter, QColor, QCursor
+
+
+class DragDropTableView(QTableView):
+    EDGE_PX = 4
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
+        self.setDragEnabled(True)
+        self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.setAcceptDrops(True)
+        self.setDropIndicatorShown(True)
+        self.setMouseTracking(True)
+        self.preview_indexes: list = []
+        self._drag_armed = False
+        self._drag_in_progress = False
+        self._grab_row_offset = 0
+        self._grab_col_offset = 0
+        self.SCROLL_MARGIN_PX = 24
+        self.SCROLL_INTERVAL_MS = 120
+        try:
+            self.verticalScrollBar().setSingleStep(self.verticalHeader().defaultSectionSize())
+            self.horizontalScrollBar().setSingleStep(self.horizontalHeader().defaultSectionSize())
+        except Exception:
+            pass
+
+        self._scroll_timer = QTimer(self)
+        self._scroll_timer.timeout.connect(self._auto_scroll_tick)
+        
+    def _selection_bounds(self):
+        indexes = self.selectedIndexes()
+        if not indexes:
+            return None
+        rows = [i.row() for i in indexes]
+        cols = [i.column() for i in indexes]
+        return min(rows), max(rows), min(cols), max(cols)
+
+    def _selection_rect(self) -> QRect | None:
+        b = self._selection_bounds()
+        if not b:
+            return None
+        r0, r1, c0, c1 = b
+        tl = self.visualRect(self.model().index(r0, c0))
+        br = self.visualRect(self.model().index(r1, c1))
+        return tl.united(br)
+
+    def _point_on_rect_edge(self, pt: QPoint, rect: QRect) -> bool:
+        outer = rect.adjusted(-self.EDGE_PX, -self.EDGE_PX, self.EDGE_PX, self.EDGE_PX)
+        inner = rect.adjusted(self.EDGE_PX, self.EDGE_PX, -self.EDGE_PX, -self.EDGE_PX)
+        return outer.contains(pt) and (not inner.contains(pt))
+
+    def _update_drag_arming_and_cursor(self, pos: QPoint):
+        rect = self._selection_rect()
+        if rect is None:
+            self._drag_armed = False
+            self.unsetCursor()
+            return
+
+        if self._point_on_rect_edge(pos, rect):
+            self._drag_armed = True
+            self.setCursor(Qt.CursorShape.SizeAllCursor)
+        else:
+            self._drag_armed = False
+            self.unsetCursor()
+
+    def _compute_target_top_left(self, hover_index):
+        model = self.model()
+        selected = self.selectedIndexes()
+        if not selected:
+            return hover_index.row(), hover_index.column(), 1, 1
+
+        rows = sorted(set(i.row() for i in selected))
+        cols = sorted(set(i.column() for i in selected))
+        height = len(rows)
+        width = len(cols)
+
+        top_left_row = hover_index.row() - self._grab_row_offset
+        top_left_col = hover_index.column() - self._grab_col_offset
+
+        max_row = max(0, model.rowCount() - height)
+        max_col = max(0, model.columnCount() - width)
+        top_left_row = max(0, min(top_left_row, max_row))
+        top_left_col = max(0, min(top_left_col, max_col))
+
+        return top_left_row, top_left_col, height, width
+
+    def _clamp_to_viewport(self, vp_pos: QPoint) -> QPoint:
+        r = self.viewport().rect()
+        x = min(max(vp_pos.x(), r.left()), r.right())
+        y = min(max(vp_pos.y(), r.top()), r.bottom())
+        return QPoint(x, y)
+
+    def _update_preview_from_hover_index(self, index):
+        model = self.model()
+        selected = self.selectedIndexes()
+        if not selected or model is None:
+            self.clear_preview()
+            return
+        rows = sorted(set(i.row() for i in selected))
+        cols = sorted(set(i.column() for i in selected))
+        top_left_row, top_left_col, _, _ = self._compute_target_top_left(index)
+        self.preview_indexes = [
+            model.index(top_left_row + r_i, top_left_col + c_i)
+            for r_i, _ in enumerate(rows)
+            for c_i, _ in enumerate(cols)
+            if (top_left_row + r_i < model.rowCount() and top_left_col + c_i < model.columnCount())]
+        self.viewport().update()
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() == Qt.MouseButton.NoButton:
+            self._update_drag_arming_and_cursor(event.position().toPoint())
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event):
+        self._drag_armed = False
+        self.unsetCursor()
+        super().leaveEvent(event)
+
+    def mousePressEvent(self, event):
+        pos = event.position().toPoint()
+        self._update_drag_arming_and_cursor(pos)
+        if self._drag_armed:
+            grabbed = self.indexAt(pos)
+            bounds = self._selection_bounds()
+            if grabbed.isValid() and bounds:
+                r0, r1, c0, c1 = bounds
+                gr = max(r0, min(grabbed.row(), r1))
+                gc = max(c0, min(grabbed.column(), c1))
+                self._grab_row_offset = gr - r0
+                self._grab_col_offset = gc - c0
+            else:
+                self._grab_row_offset = 0
+                self._grab_col_offset = 0
+        super().mousePressEvent(event)
+
+    def startDrag(self, supportedActions):
+        if not self._drag_armed:
+            return
+        indexes = self.selectedIndexes()
+        if not indexes:
+            return
+
+        self._drag_in_progress = True
+        if not self._scroll_timer.isActive():
+            self._scroll_timer.start(self.SCROLL_INTERVAL_MS)
+
+        try:
+            drag = QDrag(self)
+            mime = self.model().mimeData(indexes)
+            drag.setMimeData(mime)
+            drag.exec(Qt.DropAction.MoveAction)
+        finally:
+            self._stop_auto_scroll()
+            self.clear_preview()
+            self._drag_in_progress = False
+
+    def dragMoveEvent(self, event):
+        vp_pos = event.position().toPoint()
+        clamped = self._clamp_to_viewport(vp_pos)
+        index = self.indexAt(clamped)
+        if not index.isValid():
+            self.clear_preview()
+            return
+        self._update_preview_from_hover_index(index)
+        event.accept()
+
+    def dropEvent(self, event):
+        self._stop_auto_scroll()
+        try:
+            vp_pos = event.position().toPoint()
+            index = self.indexAt(self._clamp_to_viewport(vp_pos))
+            model = self.model()
+            if not index.isValid() or model is None:
+                event.ignore()
+                return
+            top_left_row, top_left_col, _, _ = self._compute_target_top_left(index)
+            parent_index = model.index(top_left_row, top_left_col)
+            if event.mimeData().hasFormat(model.MIME_TYPE):
+                ok = model.dropMimeData(
+                    event.mimeData(),
+                    Qt.DropAction.MoveAction,
+                    top_left_row,
+                    top_left_col,
+                    parent_index)
+                if ok:
+                    event.acceptProposedAction()
+                else:
+                    event.ignore()
+            else:
+                event.ignore()
+        finally:
+            self.clear_preview()
+            self._drag_in_progress = False
+            
+    def _auto_scroll_tick(self):
+        if not self._drag_in_progress:
+            self._stop_auto_scroll()
+            return
+        vp_pos = self.viewport().mapFromGlobal(QCursor.pos())
+        rect = self.viewport().rect()
+        dx = 0
+        dy = 0
+        if vp_pos.x() < rect.left() + self.SCROLL_MARGIN_PX:
+            dx = -1
+        elif vp_pos.x() > rect.right() - self.SCROLL_MARGIN_PX:
+            dx = 1
+
+        if vp_pos.y() < rect.top() + self.SCROLL_MARGIN_PX:
+            dy = -1
+        elif vp_pos.y() > rect.bottom() - self.SCROLL_MARGIN_PX:
+            dy = 1
+        if dx:
+            h = self.horizontalScrollBar()
+            step = max(1, h.singleStep())
+            h.setValue(h.value() + dx * step)
+        if dy:
+            v = self.verticalScrollBar()
+            step = max(1, v.singleStep())
+            v.setValue(v.value() + dy * step)
+        clamped = self._clamp_to_viewport(vp_pos)
+        idx = self.indexAt(clamped)
+        if idx.isValid():
+            self._update_preview_from_hover_index(idx)
+        else:
+            self.viewport().update()
+
+    def _stop_auto_scroll(self):
+        if self._scroll_timer.isActive():
+            self._scroll_timer.stop()
+            
+    def clear_preview(self):
+        if self.preview_indexes:
+            self.preview_indexes = []
+            self.viewport().update()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if not self.preview_indexes:
+            return
+        painter = QPainter(self.viewport())
+        painter.setBrush(QColor(0, 120, 215, 50))
+        painter.setPen(QColor(0, 120, 215))
+        for idx in self.preview_indexes:
+            rect = self.visualRect(idx)
+            painter.drawRect(rect)
