@@ -25,7 +25,7 @@ from processing.packaging import ZipEncryptor
 
 from gui.dialogs import OptionsDialog, PreviewDialog
 from gui.progress import run_busy
-from gui.password_broker import PasswordBroker  # ✅ Option B: UI-thread password prompt
+from gui.password_broker import PasswordBroker
 from utils.pdf_utils import BatchPdfPrintDialog
 
 
@@ -71,18 +71,12 @@ class MainWindow(QWidget):
         self.log = QTextEdit()
         self.log.setReadOnly(True)
         layout.addWidget(self.log, 1)
-
-        # ✅ Thread-safe logging: any thread can emit, UI thread appends
         self.log_signal.connect(self.log.append)
         self.logger = LoggerAdapter(lambda msg, _c=None: self.log_signal.emit(msg))
-
-        # ✅ UI-thread password broker (safe to call from worker threads)
         self.password_broker = PasswordBroker(self)
-        self._jobs = []  # keep busy jobs alive
+        self._jobs = []
 
-        # =========================
-        # ✅ Modular processing stack
-        # =========================
+        # ---------------- Modular Processing Stack ----------------
         self.cleaner = DataCleaner(self.logger)
         self.headers = HeaderDetector(self.logger)
         self.transforms = DomainTransforms()
@@ -91,8 +85,7 @@ class MainWindow(QWidget):
             header_detector=self.headers,
             cleaner=self.cleaner,
             logger=self.logger,
-            password_callback=self.password_broker.get_password,  # ✅ Option B
-        )
+            password_callback=self.password_broker.get_password)
 
         self.btn_change_delim.clicked.connect(self.handle_change_delim)
         self.btn_create_file.clicked.connect(self.handle_create_file)
@@ -103,9 +96,7 @@ class MainWindow(QWidget):
         self.btn_print_pdf.clicked.connect(self.handle_batch_print_pdfs)
 
         self.last_input_dir = os.getcwd()
-
     # ---------------- UI helpers ----------------
-
     def show_error(self, title, text):
         QMessageBox.critical(self, title, text)
         self.logger.log(f"[ERROR] {title}: {text}", "red")
@@ -137,16 +128,6 @@ class MainWindow(QWidget):
             self.update_last_input_dir(paths)
         return paths or None
 
-    def ask_excel_password(self, prompt: str) -> str | None:
-        # (Kept for compatibility; not used by FileLoader anymore because of PasswordBroker)
-        password, ok = QInputDialog.getText(
-            self,
-            "Password required",
-            prompt,
-            QLineEdit.EchoMode.Password
-        )
-        return password if ok else None
-
     def ask_save_csv(self, title="Save file", filter="CSV Files (*.csv);;All Files (*)", defaultName=None):
         start_dir = self._get_start_dir()
         start_path = os.path.join(start_dir, defaultName) if defaultName else start_dir
@@ -161,52 +142,29 @@ class MainWindow(QWidget):
             if not (attrs & stat.S_IWRITE):
                 os.chmod(path, attrs | stat.S_IWRITE)
 
-    def _unwrap_df(self, result):
-        # legacy helper; keep simple
-        if isinstance(result, tuple):
-            return result[0]
-        return result
-
     def _save_csv(self, df, filename, has_header=True, delimiter=","):
         df.to_csv(filename, index=False, header=has_header, sep=delimiter)
         
     def _run_busy(self, title: str, message: str, fn, on_done=None, on_err=None):
-        """
-        Start a BusyJob (indeterminate loading bar), keep it alive in self._jobs,
-        and wire callbacks safely.
-        """
         job = run_busy(self, title=title, message=message, fn=fn)
         self._jobs.append(job)
-
         def forget(*_):
             if job in self._jobs:
                 self._jobs.remove(job)
-
         job.finished.connect(forget)
         job.error.connect(forget)
-
         if on_done:
             job.finished.connect(on_done)
         if on_err:
             job.error.connect(on_err)
-
         return job
-
-
-    # =========================
-    # Handlers
-    # =========================
-
+    # ---------------- Change Delim ----------------
     def handle_change_delim(self):
-        infile = self.ask_open_file(
-            "Choose CSV/TXT file to load",
-            "CSV/TXT Files (*.csv *.txt);;All Files (*)"
-        )
+        infile = self.ask_open_file("Choose CSV/TXT file to load","CSV/TXT Files (*.csv *.txt);;All Files (*)")
         if not infile:
             return
-
         self.make_file_writable(infile)
-
+        
         def job_load():
             return self.loader.load_file(infile)
 
@@ -228,11 +186,7 @@ class MainWindow(QWidget):
 
                 base = os.path.splitext(os.path.basename(infile))[0]
                 default_name = f"{base}.csv"
-                outfile = self.ask_save_csv(
-                    "Save CSV as",
-                    "CSV Files (*.csv);;All Files (*)",
-                    defaultName=default_name
-                )
+                outfile = self.ask_save_csv("Save CSV as", "CSV Files (*.csv);;All Files (*)", defaultName=default_name)
                 if not outfile:
                     return
 
@@ -240,24 +194,17 @@ class MainWindow(QWidget):
                     self._save_csv(df, outfile, has_header=has_header, delimiter=out_delim)
                     return True
 
-                self._run_busy(
-                    "Change CSV Delimiter",
-                    "Saving file…",
-                    job_save,
+                self._run_busy("Change CSV Delimiter", "Saving file…", job_save,
                     on_done=lambda _: self.logger.log("File created successfully.", "green"),
-                    on_err=lambda e: QMessageBox.critical(self, "Save Error", e),
-                )
+                    on_err=lambda e: QMessageBox.critical(self, "Save Error", e),)
 
             except Exception as e:
                 self.show_error("Change delimiter failed", str(e))
 
         self._run_busy("Change CSV Delimiter", "Loading file…", job_load, on_done=on_loaded, on_err=on_err)
-
+    # ---------------- Create File ----------------
     def handle_create_file(self):
-        infile = self.ask_open_file(
-            "Choose File",
-            "Files (*.csv *.txt *.f *.xls *.xlsx);;All Files (*)"
-        )
+        infile = self.ask_open_file("Choose File", "Files (*.csv *.txt *.f *.xls *.xlsx);;All Files (*)")
         if not infile:
             return
 
@@ -265,10 +212,7 @@ class MainWindow(QWidget):
         if dlg.exec() != QDialog.Accepted:
             return
         opts = dlg.get_results()
-
         header_mode = opts.get("header_cleaning", "none")
-
-        # Ensure job list exists
         if not hasattr(self, "_jobs"):
             self._jobs = []
 
@@ -282,8 +226,7 @@ class MainWindow(QWidget):
             try:
                 df, has_header = result
                 if df is None:
-                    return  # e.g. password cancelled
-
+                    return
                 # -------------------- MMI --------------------
                 mmi_opts = opts.get("mmi", {})
                 if mmi_opts.get("enabled"):
@@ -294,20 +237,19 @@ class MainWindow(QWidget):
                             if not cell_name:
                                 QMessageBox.warning(self, "Missing cell name", "Scotts MMI requires a cell name.")
                                 return
-                            df = self._unwrap_df(self.transforms.append_mmi(df, "Scotts", cell_name=cell_name))
+                            df = self.transforms.append_mmi(df, "Scotts", cell_name=cell_name)
                         else:
-                            df = self._unwrap_df(self.transforms.append_mmi(df, mmi_type))
+                            df = self.transforms.append_mmi(df, mmi_type)
                     except Exception as e:
                         QMessageBox.critical(self, "MMI Error", str(e))
                         return
-
                 # -------------------- Seeds --------------------
                 seed_opts = opts.get("seeds", {})
                 if seed_opts.get("enabled"):
                     seed_key = seed_opts.get("value")
                     try:
                         seed_rows = seed_dict[seed_key][1]
-                        df = self._unwrap_df(self.transforms.append_seeds(df, seed_rows))
+                        df = self.transforms.append_seeds(df, seed_rows)
                     except Exception as e:
                         QMessageBox.critical(self, "Seed Error", str(e))
                         return
@@ -321,11 +263,7 @@ class MainWindow(QWidget):
                 delimiter = opts.get("delimiter", ",")
                 base = os.path.splitext(os.path.basename(infile))[0]
                 default_name = f"{base}.csv"
-                outfile = self.ask_save_csv(
-                    "Save output file",
-                    "CSV Files (*.csv);;All Files (*)",
-                    defaultName=default_name
-                )
+                outfile = self.ask_save_csv("Save output file","CSV Files (*.csv);;All Files (*)",defaultName=default_name)
                 if not outfile:
                     return
 
@@ -349,7 +287,6 @@ class MainWindow(QWidget):
             except Exception as e:
                 QMessageBox.critical(self, "Error", str(e))
 
-        # Start the load job AFTER callbacks exist
         job = run_busy(self, title="Create File", message="Loading file…", fn=job_load)
         self._jobs.append(job)
 
@@ -362,15 +299,11 @@ class MainWindow(QWidget):
 
         job.finished.connect(on_loaded)
         job.error.connect(on_error)
-
+    # ---------------- File Split ----------------
     def handle_split_zones(self):
-        infile = self.ask_open_file(
-            "Choose mail CSV/TXT or Excel to split",
-            "CSV/TXT/Excel Files (*.csv *.txt *.xls *.xlsx);;All Files (*)"
-        )
+        infile = self.ask_open_file("Choose mail CSV/TXT or Excel to split","CSV/TXT/Excel Files (*.csv *.txt *.xls *.xlsx);;All Files (*)")
         if not infile:
             return
-
         self.make_file_writable(infile)
 
         def job_load():
@@ -431,21 +364,12 @@ class MainWindow(QWidget):
                 default_nat = f"{base} P1.csv"
                 default_zon = f"{base} P2.csv"
 
-                nat_out = self.ask_save_csv(
-                    "Save National CSV (P1)",
-                    "CSV Files (*.csv);;All Files (*)",
-                    defaultName=default_nat
-                )
+                nat_out = self.ask_save_csv("Save National CSV (P1)","CSV Files (*.csv);;All Files (*)",defaultName=default_nat)
                 if not nat_out:
                     return
-                zon_out = self.ask_save_csv(
-                    "Save Zonal CSV (P2)",
-                    "CSV Files (*.csv);;All Files (*)",
-                    defaultName=default_zon
-                )
+                zon_out = self.ask_save_csv("Save Zonal CSV (P2)","CSV Files (*.csv);;All Files (*)",defaultName=default_zon)
                 if not zon_out:
                     return
-
                 national = national.map(lambda x: str(x).replace("\n", " ").strip())
                 zonal = zonal.map(lambda x: str(x).replace("\n", " ").strip())
 
@@ -454,24 +378,17 @@ class MainWindow(QWidget):
                     self._save_csv(zonal, zon_out, has_header=has_headerZ, delimiter=out_delim)
                     return True
 
-                self._run_busy(
-                    "Split Zones",
-                    "Saving files…",
-                    job_save,
+                self._run_busy("Split Zones","Saving files…",job_save,
                     on_done=lambda _: self.logger.log("Files created successfully.", "green"),
-                    on_err=lambda e: self.show_error("Split mail failed", e),
-                )
+                    on_err=lambda e: self.show_error("Split mail failed", e),)
 
             except Exception as e:
                 self.show_error("Split mail failed", str(e))
 
         self._run_busy("Split Zones", "Loading file…", job_load, on_done=on_loaded, on_err=on_err)
-
+    # ---------------- Update OutFile ----------------
     def handle_update_out_file(self):
-        infile = self.ask_open_file(
-            "Choose CSV/TXT to update",
-            "CSV/TXT/(*.OUT.csv *.OUT.txt);;All Files (*)"
-        )
+        infile = self.ask_open_file("Choose CSV/TXT to update", "CSV/TXT/(*.OUT.csv *.OUT.txt);;All Files (*)")
         if not infile:
             return
 
@@ -517,11 +434,7 @@ class MainWindow(QWidget):
 
                 base = os.path.splitext(os.path.basename(infile))[0]
                 default_name = f"{base}.csv"
-                outfile = self.ask_save_csv(
-                    "Save OUT file CSV",
-                    "CSV Files (*.csv);;All Files (*)",
-                    defaultName=default_name
-                )
+                outfile = self.ask_save_csv("Save OUT file CSV","CSV Files (*.csv);;All Files (*)",defaultName=default_name)
                 if not outfile:
                     return
 
@@ -531,24 +444,17 @@ class MainWindow(QWidget):
                     self._save_csv(df, outfile, has_header=has_header, delimiter=delimiter)
                     return True
 
-                self._run_busy(
-                    "Update OUT File",
-                    "Saving file…",
-                    job_save,
+                self._run_busy("Update OUT File","Saving file…",job_save,
                     on_done=lambda _: self.logger.log("OUT file updated successfully.", "green"),
-                    on_err=lambda e: QMessageBox.critical(self, "Save Error", e),
-                )
+                    on_err=lambda e: QMessageBox.critical(self, "Save Error", e),)
 
             except Exception as e:
                 self.show_error("Update OUT file failed", str(e))
 
         self._run_busy("Update OUT File", "Loading file…", job_load, on_done=on_loaded, on_err=on_err)
-
+    # ---------------- Create Zip ----------------
     def handle_create_zip(self):
-        files = self.ask_open_files(
-            "Choose files to ZIP",
-            "All Files (*.*);;CSV Files (*.csv);;Text Files (*.txt);;Excel Files (*.xls *.xlsx)"
-        )
+        files = self.ask_open_files("Choose files to ZIP","All Files (*.*);;CSV Files (*.csv);;Text Files (*.txt);;Excel Files (*.xls *.xlsx)")
         if not files:
             return
 
@@ -570,11 +476,7 @@ class MainWindow(QWidget):
         base = ".".join(first_file.split(".")[:-2]) or first_file.split(".")[0]
         default_zip_name = f"{base} DATA.zip"
 
-        zipfile = self.ask_save_csv(
-            "Save encrypted ZIP as",
-            "ZIP Files (*.zip);;All Files (*)",
-            defaultName=default_zip_name
-        )
+        zipfile = self.ask_save_csv("Save encrypted ZIP as", "ZIP Files (*.zip);;All Files (*)", defaultName=default_zip_name)
         if not zipfile:
             return
 
@@ -606,21 +508,17 @@ class MainWindow(QWidget):
             self.show_error("Create ZIP failed", err_text)
 
         self._run_busy("Create ZIP", "Creating ZIP…", job_zip, on_done=on_zipped, on_err=on_zip_err)
-
+    # ---------------- Generate Password ----------------
     def handle_generate_random_password(self):
         password = self.packager.generate_password()
         self.logger.log(f"Generated random password: {password}", "green")
-
+    # ---------------- Print PDFs ----------------
     def handle_batch_print_pdfs(self):
         pdfs = self.ask_open_files("Select PDFs for batch print", "PDF Files (*.pdf)")
         if not pdfs:
             return
 
-        dlg_opts = OptionsDialog(
-            PRINT_PDF_SCHEMA,
-            parent=self,
-            title="Print Options"
-        )
+        dlg_opts = OptionsDialog(PRINT_PDF_SCHEMA, parent=self,title="Print Options")
         if dlg_opts.exec() != QDialog.Accepted:
             return
 

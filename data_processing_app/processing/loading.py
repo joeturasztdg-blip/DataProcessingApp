@@ -64,7 +64,6 @@ class FileLoader:
             except Exception:
                 self.logger.log("[LOAD] Incorrect password — try again or cancel.", "red")
 
-
     def _process_rows(self, rows, header_cleaning_mode="none"):
         if len(rows) < 4:
             raise ValueError("Invalid file.")
@@ -85,16 +84,14 @@ class FileLoader:
         df = self.cleaner.clean_header_names(
             df,
             has_header,
-            mode=header_cleaning_mode,
-        )
+            mode=header_cleaning_mode,)
 
         if has_header:
             new_cols = make_unique_columns(df.columns)
             if list(df.columns) != new_cols:
                 self.logger.log(
                     "[HEADER] Renamed duplicate columns (A → A (1), A (2), …)",
-                    "yellow",
-                )
+                    "yellow",)
                 df.columns = new_cols
         return df, has_header
 

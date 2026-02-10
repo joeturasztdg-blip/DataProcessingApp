@@ -1,4 +1,3 @@
-# gui/progress.py
 from __future__ import annotations
 
 import traceback
@@ -7,10 +6,9 @@ from typing import Callable, Any
 from PySide6.QtCore import QObject, Signal, Slot, QThread, QTimer
 from PySide6.QtWidgets import QProgressDialog
 
-
 class BusyWorker(QObject):
-    finished = Signal(object)   # result
-    error = Signal(str)         # traceback
+    finished = Signal(object)
+    error = Signal(str)
 
     def __init__(self, fn: Callable[[], Any]):
         super().__init__()
@@ -26,9 +24,6 @@ class BusyWorker(QObject):
 
 
 class BusyJob(QObject):
-    """
-    Owns thread/worker/dialog and guarantees the dialog closes BEFORE external slots run.
-    """
     finished = Signal(object)
     error = Signal(str)
 
@@ -49,12 +44,10 @@ class BusyJob(QObject):
 
         self.thread.started.connect(self.worker.run)
 
-        # IMPORTANT: close dialog first, then emit finished/error on next event loop tick
         self.worker.finished.connect(self._handle_finished)
         self.worker.error.connect(self._handle_error)
 
         if cancelable:
-            # UI cancel closes dialog and stops thread loop (does not stop computation)
             self.dialog.canceled.connect(self._cleanup_deferred)
 
     def start(self):
@@ -68,8 +61,6 @@ class BusyJob(QObject):
             self.dialog.close()
         except Exception:
             pass
-
-        # Emit finished AFTER dialog closes (next tick)
         QTimer.singleShot(0, lambda: self.finished.emit(res))
         self._cleanup_deferred()
 
@@ -96,7 +87,4 @@ class BusyJob(QObject):
 
 
 def run_busy(parent, title: str, message: str, fn: Callable[[], Any], cancelable: bool = False) -> BusyJob:
-    """
-    Returns a BusyJob. Keep a reference (e.g., store on self._jobs).
-    """
     return BusyJob(parent, title, message, fn, cancelable=cancelable).start()

@@ -52,7 +52,6 @@ class DomainTransforms:
 
         return df
 
-
     def remove_cols(self, df):
         return df.drop(columns=[
             "BagNo","ItemNo","SscZone","Carrier",

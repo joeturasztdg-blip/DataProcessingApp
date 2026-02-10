@@ -55,9 +55,6 @@ class DragDropPandasModel(QAbstractTableModel):
         return str(section + 1)
 
     def _next_unique_name(self, desired: str, col_being_renamed: int) -> str:
-        """
-        Return a unique column name based on desired, excluding the column being renamed.
-        """
         desired = str(desired).strip()
         if not desired:
             desired = "Column"
@@ -67,19 +64,14 @@ class DragDropPandasModel(QAbstractTableModel):
 
         if desired not in existing_set:
             return desired
-
-        # If user typed "Beep (3)", treat base as "Beep"
         m = _DUP_RE.match(desired)
         base = (m.group(1) or "").strip() or desired
-
-        # Find next available suffix
         n = 1
         while True:
             candidate = f"{base} ({n})"
             if candidate not in existing_set and candidate != desired:
                 return candidate
             n += 1
-
     
     def rename_column(self, col: int, new_name: str):
         new_name = (new_name or "").strip()
@@ -98,7 +90,6 @@ class DragDropPandasModel(QAbstractTableModel):
         self.df.columns = cols
         self.headerDataChanged.emit(Qt.Orientation.Horizontal, col, col)
 
-    
     def insert_row_above(self, row: int):
         self.push_undo_state()
         self.beginInsertRows(QModelIndex(), row, row)
