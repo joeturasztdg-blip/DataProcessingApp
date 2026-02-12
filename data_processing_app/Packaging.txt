@@ -1,6 +1,0 @@
-py -3.14 -m PyInstaller --clean --noconsole --onefile --name DataProcessingApp `
-  --add-binary "7z.exe;." `
-  main.py
-
-Move-Item dist\DataProcessingApp.exe . -Force
-Remove-Item build, dist -Recurse -Force
