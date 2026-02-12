@@ -52,21 +52,6 @@ class DomainTransforms:
 
         return df
 
-    def remove_cols(self, df):
-        return df.drop(columns=[
-            "BagNo","ItemNo","SscZone","Carrier",
-            "Depot","BagBreak","BarcodeData"
-        ], errors="ignore")
-
-    @staticmethod
-    def split_by_zone(df):
-        if "SscZone" not in df:
-            raise ValueError("No SscZone column")
-        zone = df["SscZone"].astype(str).str.extract(r'([A-Za-z])$')[0]
-        zonal = df[zone.isin(["A","B"])]
-        national = df[~zone.isin(["A","B"])]
-        return zonal.copy(), national.copy()
-
     @staticmethod
     def update_UCID(df, ucid_map):
         pat = re.compile(r"\b(UCID1|UCID2)\b")

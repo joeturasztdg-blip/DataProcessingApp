@@ -51,24 +51,43 @@ def print_to_specific_printer(pdf_path, printer_name):
     system = platform.system()
 
     if system == "Windows":
-        possible = [
+        possible = []
+
+        # ---- PyInstaller onefile bundle dir ----
+        bundle = getattr(sys, "_MEIPASS", None)
+        if bundle:
+            possible.append(os.path.join(bundle, "SumatraPDF.exe"))
+
+        # ---- Normal locations ----
+        possible.extend([
             os.path.join(os.getcwd(), "SumatraPDF.exe"),
             os.path.join(os.path.dirname(sys.argv[0]), "SumatraPDF.exe"),
             r"C:\Program Files\SumatraPDF\SumatraPDF.exe",
-            r"C:\Program Files (x86)\SumatraPDF\SumatraPDF.exe",]
+            r"C:\Program Files (x86)\SumatraPDF\SumatraPDF.exe",
+        ])
+
         sumatra = next((p for p in possible if os.path.exists(p)), None)
         if not sumatra:
-            QMessageBox.critical(None, "Error", 
-                "SumatraPDF.exe not found.\nPlace it next to the application.")
+            QMessageBox.critical(
+                None,
+                "Error",
+                "SumatraPDF.exe not found.\nPlace it next to the application.",
+            )
             return
-        cmd = [sumatra,
+
+        cmd = [
+            sumatra,
             "-print-to", printer_name,
             "-print-settings", "noscale",
             "-silent",
-            pdf_path]
+            pdf_path,
+        ]
+
         subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         return
+
     subprocess.run(["lp", "-d", printer_name, pdf_path])
+
 
 class BatchPdfPrintDialog(QDialog):
     def __init__(self, pdf_list, print_opts, parent=None):

@@ -53,8 +53,15 @@ class DataCleaner:
         cols_to_drop = []
         for col in df.columns:
             header = str(col).strip()
-            is_placeholder = not header or re.fullmatch(r"Column\d+", header)
-            if df[col].isna().all() and is_placeholder:
+            is_placeholder = (not header) or (re.fullmatch(r"Column\d+", header) is not None)
+
+            # df[col] can be a DataFrame if there are duplicate column names,
+            # in which case .isna().all() returns a Series -> reduce to a bool.
+            col_all_na = df[col].isna().all()
+            if hasattr(col_all_na, "all"):
+                col_all_na = col_all_na.all()
+
+            if col_all_na and is_placeholder:
                 cols_to_drop.append(col)
 
         if cols_to_drop:
@@ -67,13 +74,15 @@ class DataCleaner:
             self.logger.log(
                 f"Removed {self.cleansing_stats['removed_chars']} hidden characters "
                 f"from {self.cleansing_stats['modified_cells']} cells.",
-                "yellow")
+                "yellow",
+            )
         if before_rows > after_rows:
             self.logger.log(f"Dropped {before_rows - after_rows} empty rows", "yellow")
 
         if before_cols > after_cols:
             self.logger.log(f"Dropped {before_cols - after_cols} empty columns.", "yellow")
         return df
+
         
     def clean_header_names(self, df: pd.DataFrame, has_header: bool, mode: str = "none") -> pd.DataFrame:
         if not has_header:

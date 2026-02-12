@@ -1,5 +1,5 @@
 import re
-from utils.row_utils import pad_rows, trailing_empty_run, is_duplicate_header
+from utils.table_utils import pad_rows, trailing_empty_run, is_duplicate_header
 
 class HeaderDetector:
     def __init__(self, logger):

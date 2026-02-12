@@ -1,7 +1,7 @@
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QRadioButton, QComboBox, QLineEdit,
-    QLabel, QInputDialog, QGroupBox, QDialog, QMenu)
+    QLabel, QInputDialog, QGroupBox, QDialog, QMenu, QScrollArea, QCheckBox)
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeyEvent
 
@@ -170,6 +170,8 @@ class OptionsDialog(QDialog):
         self.controls = {}
         self.setWindowTitle(title)
         self.resize(500, 500)
+        self._dynamic_multis = []
+        self._controls_widgets = {}
 
         self.main_layout = QVBoxLayout(self)
         self._build_ui()
@@ -180,12 +182,16 @@ class OptionsDialog(QDialog):
         builders = {
             "radio": self._build_radio_group,
             "toggle_select": self._build_toggle_select,
-            "radio_with_extras": self._build_radio_with_extras}
+            "radio_with_extras": self._build_radio_with_extras,
+            "select": self._build_select,
+            "multi_select": self._build_multi_select}
         for cfg in self.schema:
             builder = builders.get(cfg["type"])
             if not builder:
                 raise ValueError(f"Unsupported schema type: {cfg['type']}")
             self.main_layout.addWidget(builder(cfg))
+        self._refresh_dynamic_controls()
+
 
     def _add_dialog_buttons(self):
         btns = QHBoxLayout()
@@ -340,5 +346,89 @@ class OptionsDialog(QDialog):
         self.controls[cfg["key"]] = read
         return box
     
+    def _build_select(self, cfg):
+        box = QGroupBox(cfg["label"])
+        layout = QVBoxLayout(box)
+
+        combo = QComboBox()
+        for opt in cfg["options"]:
+            label, value = (opt["label"], opt["value"]) if isinstance(opt, dict) else opt
+            combo.addItem(label, value)
+
+        default = cfg.get("default")
+        if default is not None:
+            idx = combo.findData(default)
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+
+        layout.addWidget(combo)
+
+        self._controls_widgets[cfg["key"]] = combo
+        self.controls[cfg["key"]] = lambda: combo.currentData()
+
+        combo.currentIndexChanged.connect(self._refresh_dynamic_controls)
+        return box
+
+    def _build_multi_select(self, cfg):
+        box = QGroupBox(cfg["label"])
+        outer = QVBoxLayout(box)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        outer.addWidget(scroll)
+
+        inner = QWidget()
+        inner_layout = QVBoxLayout(inner)
+        inner_layout.setContentsMargins(6, 6, 6, 6)
+        scroll.setWidget(inner)
+
+        checkboxes = []
+
+        def set_options(options):
+            nonlocal checkboxes
+            currently_checked = {cb._value for cb in checkboxes if cb.isChecked()}
+
+            while inner_layout.count():
+                item = inner_layout.takeAt(0)
+                w = item.widget()
+                if w is not None:
+                    w.deleteLater()
+
+            checkboxes = []
+            default = set(cfg.get("default", [])) | currently_checked
+
+            for opt in options or []:
+                label, value = (opt["label"], opt["value"]) if isinstance(opt, dict) else opt
+                cb = QCheckBox(str(label))
+                cb._value = value
+                cb.setChecked(value in default)
+                inner_layout.addWidget(cb)
+                checkboxes.append(cb)
+
+            inner_layout.addStretch()
+
+        set_options(cfg.get("options", []))
+
+        def read():
+            return [cb._value for cb in checkboxes if cb.isChecked()]
+
+        self.controls[cfg["key"]] = read
+
+        depends_on = cfg.get("depends_on")
+        options_provider = cfg.get("options_provider")
+        if depends_on and callable(options_provider):
+            self._dynamic_multis.append((depends_on, set_options, read, options_provider))
+
+        return box
+
+    def _refresh_dynamic_controls(self):
+        for depends_on_key, set_options, _read, options_fn in getattr(self, "_dynamic_multis", []):
+            dep_widget = self._controls_widgets.get(depends_on_key)
+            if dep_widget is None:
+                continue
+            current_value = dep_widget.currentData()
+            new_options = options_fn(current_value)
+            set_options(new_options)
+
     def get_results(self):
         return {key: getter() for key, getter in self.controls.items()}

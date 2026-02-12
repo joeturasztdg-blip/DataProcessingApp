@@ -1,6 +1,5 @@
 import os, csv, io, pandas as pd, msoffcrypto
-from utils.row_utils import pad_rows
-from utils.col_utils import make_unique_columns
+from utils.table_utils import pad_rows, make_unique_columns
 
 class FileLoader:
     def __init__(self, header_detector, cleaner, logger, password_callback):
@@ -25,18 +24,21 @@ class FileLoader:
 
     def _load_excel(self, filename, header_cleaning_mode="none"):
         # Normal read
+        normal_exc = None
         try:
             df = pd.read_excel(filename, header=None, dtype=str).fillna("")
             return self._process_rows(df.values.tolist(), header_cleaning_mode=header_cleaning_mode)
-        except Exception:
+        except Exception as e:
+            normal_exc = e
             if not self.password_callback:
                 raise
 
-        # Check encrypted
+        # Check encrypted (only reached if normal read failed AND password callback exists)
         with open(filename, "rb") as f:
             office = msoffcrypto.OfficeFile(f)
             if not office.is_encrypted():
-                raise
+                # Not encrypted, so the earlier failure wasn't about encryption
+                raise normal_exc
 
         while True:
             password = self.password_callback("Enter password:")
@@ -63,6 +65,7 @@ class FileLoader:
 
             except Exception:
                 self.logger.log("[LOAD] Incorrect password — try again or cancel.", "red")
+
 
     def _process_rows(self, rows, header_cleaning_mode="none"):
         if len(rows) < 4:

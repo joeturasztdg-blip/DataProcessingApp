@@ -2,7 +2,7 @@ import sys
 import csv
 
 from PySide6.QtWidgets import QApplication
-from gui.main_window import MainWindow
+from gui.window import MainWindow
 
 max_int = sys.maxsize
 while True:

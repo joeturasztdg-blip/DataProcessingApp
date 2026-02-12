@@ -30,10 +30,10 @@ seed_dict = {
     "5": ("Print Data Solutions", [
         ["","","","","James Chan", "33A Conisboro Avenue", "", "Reading", "RG4 7JE"],
         ["","","","","Karan Gupta", "1 Hob Mews", "35 Tadema Road", "London", "SW10 0PZ"],
-        ["","","","","Royal Mail Wholesale UCID", "PO Box 72662", "", "London", "E1W 9LD"],
-        ["","","","","Client Services UCID", "The Delivery Group", "Unit 2 Catalina Approach", "Warrington", "WA5 3UY"],
-        ["","","","","Royal Mail Wholesale UCID", "PO Box 72662", "", "London", "E1W 9LD"],
-        ["","","","","Client Services UCID", "The Delivery Group", "Unit 2 Catalina Approach", "Warrington", "WA5 3UY"],
+        ["","","","","Royal Mail Wholesale UCID1", "PO Box 72662", "", "London", "E1W 9LD"],
+        ["","","","","Client Services UCID1", "The Delivery Group", "Unit 2 Catalina Approach", "Warrington", "WA5 3UY"],
+        ["","","","","Royal Mail Wholesale UCID2", "PO Box 72662", "", "London", "E1W 9LD"],
+        ["","","","","Client Services UCID2", "The Delivery Group", "Unit 2 Catalina Approach", "Warrington", "WA5 3UY"],
     ]),
     
     "6": ("Production Hub", [
@@ -84,27 +84,3 @@ seed_dict = {
         ["", "", "", "", "", "Client Services UCID2", "", "The Delivery Group", "Unit 2 Catalina Approach", "Omega South", "Warrington", "", "WA5 3UY"]
     ])
 }
-
-split_seed_dict = {
-    "1": ("Advertising", [
-        ["Royal Mail Wholesale UCID1", "PO Box 72662", "", "", "London", "E1W 9LD", "1A"],
-        ["Client Services UCID1", "The Delivery Group", "Unit 2 Catalina Approach", "Omega South", "Warrington", "WA5 3UY", "1B"],
-    ]),
-    "2": ("Digital Stamp", [
-        ["SM Digital Stamp Sample UCID1", "The Delivery Group", "Unit 2 Catalina Approach", "Omega South", "Warrington", "WA5 3UY"],
-        ["RM Digital Stamp Sample UCID1", "RM Digital Stamp Team", "PO BOX 73733", "LONDON", "", "EC1P 1JX"],
-    ]),
-    "3": ("Partially Addressing", [
-        ["Royal Mail Wholesale UCID1", "PO Box 75218", "", "", "London", "E1W 9PZ"],
-        ["PA Team UCID1", "The Delivery Group", "Unit 2 Catalina Approach", "Omega South", "Warrington", "WA5 3UY"],
-    ]),
-    "4": ("Damart", {
-        "DamartN": [
-            ["", "", "Royal Mail Wholesale UCID K8Z000", "PO Box 72662", "", "", "London", "E1W 9LD"],
-            ["", "", "Client Services UCID K8Z000", "The Delivery Group", "Unit 2 Catalina Approach", "Omega South", "Warrington", "WA5 3UY"],
-        ],
-        "DamartZ": [
-            ["", "", "Royal Mail Wholesale UCID IZK000", "PO Box 72662", "", "", "London", "E1W 9LD"],
-            ["", "", "Client Services UCID IZK000", "The Delivery Group", "Unit 2 Catalina Approach", "Omega South", "Warrington", "WA5 3UY"],
-        ],
-    })}

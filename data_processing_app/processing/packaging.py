@@ -38,9 +38,20 @@ class ZipEncryptor:
             "-mem=ZipCrypto",
         ]
 
-        subprocess.run(
-            cmd,
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        try:
+            res = subprocess.run(cmd, capture_output=True, text=True)
+        except OSError as e:
+            # WinError 740 = requires elevation (UAC)
+            if getattr(e, "winerror", None) == 740:
+                raise PermissionError("Permission Error") from None
+            # WinError 5 = access denied (also common)
+            if getattr(e, "winerror", None) == 5:
+                raise PermissionError("Permission Error") from None
+            raise
+
+        if res.returncode != 0:
+            msg = (res.stderr or res.stdout or "").strip()
+            lower = msg.lower()
+            if ("access is denied" in lower) or ("permission" in lower) or ("denied" in lower):
+                raise PermissionError("Permission Error")
+            raise RuntimeError(msg or "ZIP creation failed")

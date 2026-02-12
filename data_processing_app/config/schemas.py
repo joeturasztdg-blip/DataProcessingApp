@@ -1,4 +1,4 @@
-from config.seeds import seed_dict, split_seed_dict
+from config.seeds import seed_dict
 
 CHANGE_DELIM_SCHEMA = [
     {
@@ -67,17 +67,40 @@ CREATE_FILE_SCHEMA = [
     }
 ]
 
-SPLIT_ZONES_SCHEMA = [
+SPLIT_FILE_SCHEMA = [
+    {
+        "type": "select",
+        "key": "split_column",
+        "label": "Column to split by",
+        "options": [],              # injected at runtime from df.columns
+        "default": "__select__",
+    },
+    {
+        "type": "multi_select",
+        "key": "file1_values",
+        "label": "File 1",
+        "options": [],              # will be auto-refreshed
+        "default": [],
+        "depends_on": "split_column",
+    },
+    {
+        "type": "multi_select",
+        "key": "file2_values",
+        "label": "File 2",
+        "options": [],              # will be auto-refreshed
+        "default": [],
+        "depends_on": "split_column",
+    },
     {
         "type": "toggle_select",
         "key": "seeds",
         "label": "Seed Settings",
         "toggle": {"off": "No seeds", "on": "Add seeds"},
         "options": [
-            {"label": f"{k}: {split_seed_dict[k][0]}", "value": k}
-            for k in split_seed_dict
+            {"label": f"{k}: {seed_dict[k][0]}", "value": k}
+            for k in seed_dict
         ],
-        "default": "off"
+        "default": "off",
     },
     {
         "type": "radio",
@@ -87,10 +110,10 @@ SPLIT_ZONES_SCHEMA = [
             ("Comma (,)", ","),
             ("Semicolon (;)", ";"),
             ("Tab", "\t"),
-            ("Pipe (|)", "|")
+            ("Pipe (|)", "|"),
         ],
-        "default": ","
-    }
+        "default": ",",
+    },
 ]
 
 UPDATE_OUT_FILE_SCHEMA = [
