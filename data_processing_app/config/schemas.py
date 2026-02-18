@@ -1,16 +1,12 @@
 from config.seeds import seed_dict
+from config.constants import DELIMITER_OPTIONS
 
 CHANGE_DELIM_SCHEMA = [
     {
         "type": "radio",
         "key": "delimiter",
         "label": "Output Delimiter",
-        "options": [
-            ("Comma (,)", ","),
-            ("Semicolon (;)", ";"),
-            ("Tab", "\t"),
-            ("Pipe (|)", "|")
-        ],
+        "options": DELIMITER_OPTIONS,
         "default": ","
     }
 ]
@@ -57,12 +53,7 @@ CREATE_FILE_SCHEMA = [
         "type": "radio",
         "key": "delimiter",
         "label": "Output Delimiter",
-        "options": [
-            ("Comma (,)", ","),
-            ("Semicolon (;)", ";"),
-            ("Tab", "\t"),
-            ("Pipe (|)", "|")
-        ],
+        "options": DELIMITER_OPTIONS,
         "default": ","
     }
 ]
@@ -72,14 +63,14 @@ SPLIT_FILE_SCHEMA = [
         "type": "select",
         "key": "split_column",
         "label": "Column to split by",
-        "options": [],              # injected at runtime from df.columns
+        "options": [],
         "default": "__select__",
     },
     {
         "type": "multi_select",
         "key": "file1_values",
         "label": "File 1",
-        "options": [],              # will be auto-refreshed
+        "options": [],
         "default": [],
         "depends_on": "split_column",
     },
@@ -87,7 +78,7 @@ SPLIT_FILE_SCHEMA = [
         "type": "multi_select",
         "key": "file2_values",
         "label": "File 2",
-        "options": [],              # will be auto-refreshed
+        "options": [],
         "default": [],
         "depends_on": "split_column",
     },
@@ -106,12 +97,7 @@ SPLIT_FILE_SCHEMA = [
         "type": "radio",
         "key": "delimiter",
         "label": "Output Delimiter",
-        "options": [
-            ("Comma (,)", ","),
-            ("Semicolon (;)", ";"),
-            ("Tab", "\t"),
-            ("Pipe (|)", "|"),
-        ],
+        "options": DELIMITER_OPTIONS,
         "default": ",",
     },
 ]
@@ -176,12 +162,7 @@ UPDATE_OUT_FILE_SCHEMA = [
         "type": "radio",
         "key": "delimiter",
         "label": "Output Delimiter",
-        "options": [
-            ("Comma (,)", ","),
-            ("Semicolon (;)", ";"),
-            ("Tab", "\t"),
-            ("Pipe (|)", "|")
-        ],
+        "options": DELIMITER_OPTIONS,
         "default": ","
     }
 ]
