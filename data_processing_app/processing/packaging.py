@@ -41,10 +41,8 @@ class ZipEncryptor:
         try:
             res = subprocess.run(cmd, capture_output=True, text=True)
         except OSError as e:
-            # WinError 740 = requires elevation (UAC)
             if getattr(e, "winerror", None) == 740:
                 raise PermissionError("Permission Error") from None
-            # WinError 5 = access denied (also common)
             if getattr(e, "winerror", None) == 5:
                 raise PermissionError("Permission Error") from None
             raise
