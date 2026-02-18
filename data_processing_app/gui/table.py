@@ -3,10 +3,10 @@ from PySide6.QtWidgets import QAbstractItemView, QTableView
 from PySide6.QtCore import Qt, QRect, QPoint, QTimer
 from PySide6.QtGui import QDrag, QPainter, QColor, QCursor
 
+from config.constants import (TABLE_EDGE_GRAB_PX, TABLE_SCROLL_MARGIN_PX, TABLE_SCROLL_INTERVAL_MS)
+
 
 class DragDropTableView(QTableView):
-    EDGE_PX = 4
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
@@ -21,8 +21,6 @@ class DragDropTableView(QTableView):
         self._drag_in_progress = False
         self._grab_row_offset = 0
         self._grab_col_offset = 0
-        self.SCROLL_MARGIN_PX = 24
-        self.SCROLL_INTERVAL_MS = 120
         try:
             self.verticalScrollBar().setSingleStep(self.verticalHeader().defaultSectionSize())
             self.horizontalScrollBar().setSingleStep(self.horizontalHeader().defaultSectionSize())
@@ -50,8 +48,8 @@ class DragDropTableView(QTableView):
         return tl.united(br)
 
     def _point_on_rect_edge(self, pt: QPoint, rect: QRect) -> bool:
-        outer = rect.adjusted(-self.EDGE_PX, -self.EDGE_PX, self.EDGE_PX, self.EDGE_PX)
-        inner = rect.adjusted(self.EDGE_PX, self.EDGE_PX, -self.EDGE_PX, -self.EDGE_PX)
+        outer = rect.adjusted(-TABLE_EDGE_GRAB_PX, -TABLE_EDGE_GRAB_PX, TABLE_EDGE_GRAB_PX, TABLE_EDGE_GRAB_PX)
+        inner = rect.adjusted(TABLE_EDGE_GRAB_PX, TABLE_EDGE_GRAB_PX, -TABLE_EDGE_GRAB_PX, -TABLE_EDGE_GRAB_PX)
         return outer.contains(pt) and (not inner.contains(pt))
 
     def _update_drag_arming_and_cursor(self, pos: QPoint):
@@ -147,7 +145,7 @@ class DragDropTableView(QTableView):
 
         self._drag_in_progress = True
         if not self._scroll_timer.isActive():
-            self._scroll_timer.start(self.SCROLL_INTERVAL_MS)
+            self._scroll_timer.start(TABLE_SCROLL_INTERVAL_MS)
 
         try:
             drag = QDrag(self)
@@ -205,14 +203,14 @@ class DragDropTableView(QTableView):
         rect = self.viewport().rect()
         dx = 0
         dy = 0
-        if vp_pos.x() < rect.left() + self.SCROLL_MARGIN_PX:
+        if vp_pos.x() < rect.left() + TABLE_SCROLL_MARGIN_PX:
             dx = -1
-        elif vp_pos.x() > rect.right() - self.SCROLL_MARGIN_PX:
+        elif vp_pos.x() > rect.right() - TABLE_SCROLL_MARGIN_PX:
             dx = 1
 
-        if vp_pos.y() < rect.top() + self.SCROLL_MARGIN_PX:
+        if vp_pos.y() < rect.top() + TABLE_SCROLL_MARGIN_PX:
             dy = -1
-        elif vp_pos.y() > rect.bottom() - self.SCROLL_MARGIN_PX:
+        elif vp_pos.y() > rect.bottom() - TABLE_SCROLL_MARGIN_PX:
             dy = 1
         if dx:
             h = self.horizontalScrollBar()

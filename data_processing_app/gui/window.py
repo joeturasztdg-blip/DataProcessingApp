@@ -1,13 +1,13 @@
 import os
 import stat
 
-from config.constants import APP_TITLE
+from config.constants import APP_TITLE, MAIN_WINDOW_MIN_HEIGHT, MAIN_WINDOW_MIN_WIDTH
 
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QMessageBox, QLabel, QFileDialog, QGroupBox, QTextEdit)
+from PySide6.QtWidgets import (QWidget,QVBoxLayout,QPushButton,QMessageBox,QLabel,QFileDialog,QGroupBox,QTextEdit)
 from PySide6.QtCore import Qt, Signal
 
 from workspace.services import build_services
-from workspace.jobs import JobRunner
+from workspace.jobs import JobRunner, CANCELLED_MSG
 
 from workspace.change_delim import ChangeDelimiter
 from workspace.create_file import CreateFile
@@ -24,7 +24,7 @@ class MainWindow(QWidget):
         super().__init__()
 
         self.setWindowTitle(APP_TITLE)
-        self.setMinimumSize(760, 560)
+        self.setMinimumSize(MAIN_WINDOW_MIN_WIDTH, MAIN_WINDOW_MIN_HEIGHT)
 
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
@@ -38,15 +38,12 @@ class MainWindow(QWidget):
         group = QGroupBox("Processing Actions")
         group_layout = QVBoxLayout(group)
         layout.addWidget(group)
-
         # ---- Log ----
         self.log = QTextEdit()
         self.log.setReadOnly(True)
         layout.addWidget(self.log, 1)
         self.log_signal.connect(self.log.append)
-
         # ---- Services + Jobs ----
-        self.services = build_services(self)
         self.s = build_services(self)
         self.jobs = JobRunner(self)
         # ---- Workflows ----
@@ -57,7 +54,6 @@ class MainWindow(QWidget):
         self.create_zip = CreateZip(self)
         self.generate_password = GeneratePassword(self)
         self.print_pdf = PrintPdf(self)
-
         # ---- Actions (buttons + wiring) ----
         actions = [
             ("btn_change_delim", "Change CSV Delimiter", self.change_delim.run),
@@ -66,19 +62,26 @@ class MainWindow(QWidget):
             ("btn_update_out_file", "Update .OUT file", self.update_out_file.run),
             ("btn_create_zip", "Create ZIP", self.create_zip.run),
             ("btn_generate_random_password", "Generate Random Password", self.generate_password.run),
-            ("btn_print_pdf", "Print PDF", self.print_pdf.run),
-        ]
+            ("btn_print_pdf", "Print PDF", self.print_pdf.run)]
 
+        self._action_buttons: list[QPushButton] = []
         for attr, text, slot in actions:
             btn = QPushButton(text)
             btn.setMinimumHeight(40)
             btn.clicked.connect(slot)
             setattr(self, attr, btn)
             group_layout.addWidget(btn)
+            self._action_buttons.append(btn)
 
         self.last_input_dir = os.getcwd()
-
     # ---------------- UI helpers ----------------
+    def set_actions_enabled(self, enabled: bool) -> None:
+        for b in getattr(self, "_action_buttons", []):
+            try:
+                b.setEnabled(bool(enabled))
+            except Exception:
+                pass
+
     def show_error(self, title, text):
         QMessageBox.critical(self, title, text)
         self.s.logger.log(f"[ERROR] {title}: {text}", "red")
@@ -127,5 +130,33 @@ class MainWindow(QWidget):
     def _save_csv(self, df, filename, has_header=True, delimiter=","):
         df.to_csv(filename, index=False, header=has_header, sep=delimiter)
 
-    def _run_busy(self, title: str, message: str, fn, on_done=None, on_err=None, cancelable: bool = False):
-        return self.jobs.run(title, message, fn, on_done=on_done, on_err=on_err, cancelable=cancelable)
+    def _run_busy(self,title: str,message: str,fn,on_done=None,on_err=None,cancelable: bool = False,progress_total=None,):
+        self.set_actions_enabled(False)
+        cancelled = {"flag": False}
+
+        def done_wrapper(res):
+            self.set_actions_enabled(True)
+            if cancelled["flag"]:
+                return
+            if on_done:
+                on_done(res)
+
+        def err_wrapper(err_text: str):
+            self.set_actions_enabled(True)
+            if (err_text or "").strip() == CANCELLED_MSG:
+                return
+            if on_err:
+                on_err(err_text)
+            else:
+                self.show_error(title, err_text)
+
+        job = self.jobs.run(title,message,fn,on_done=done_wrapper,on_err=err_wrapper,cancelable=cancelable,progress_total=progress_total,)
+        try:
+            def _mark_cancelled():
+                cancelled["flag"] = True
+                self.s.logger.log("User Interrupt", "yellow")
+
+            job.cancel_requested.connect(_mark_cancelled)
+        except Exception:
+            pass
+        return job
