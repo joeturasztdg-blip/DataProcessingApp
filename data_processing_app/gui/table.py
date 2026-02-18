@@ -59,12 +59,14 @@ class DragDropTableView(QTableView):
             self.unsetCursor()
             return
 
-        if self._point_on_rect_edge(pos, rect):
+        # Arm drag ONLY when the cursor is inside the selected rectangle.
+        if rect.contains(pos):
             self._drag_armed = True
             self.setCursor(Qt.CursorShape.SizeAllCursor)
         else:
             self._drag_armed = False
             self.unsetCursor()
+
 
     def _compute_target_top_left(self, hover_index):
         model = self.model()

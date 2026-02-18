@@ -1,11 +1,13 @@
 import re
+import json
+import secrets
 import pandas as pd
-import pickle
 
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import Qt, QAbstractTableModel, QMimeData, QModelIndex
+from PySide6.QtCore import Qt, QAbstractTableModel, QMimeData, QModelIndex, QByteArray
 
 _DUP_RE = re.compile(r"^(.*?)(?: \((\d+)\))?$")
+
 
 class DragDropPandasModel(QAbstractTableModel):
     MIME_TYPE = "application/x-pandas-cell-block"
@@ -15,6 +17,8 @@ class DragDropPandasModel(QAbstractTableModel):
         self.df = df.copy()
         self.undo_stack = []
         self.redo_stack = []
+        # Token prevents accepting drags from other model instances / foreign sources.
+        self._drag_token = secrets.token_hex(16)
 
     def rowCount(self, parent=None):
         return len(self.df)
@@ -41,11 +45,12 @@ class DragDropPandasModel(QAbstractTableModel):
         if not index.isValid():
             return Qt.ItemFlag.ItemIsDropEnabled
         return (
-            Qt.ItemFlag.ItemIsSelectable |
-            Qt.ItemFlag.ItemIsEnabled |
-            Qt.ItemFlag.ItemIsDragEnabled |
-            Qt.ItemFlag.ItemIsDropEnabled |
-            Qt.ItemFlag.ItemIsEditable)
+            Qt.ItemFlag.ItemIsSelectable
+            | Qt.ItemFlag.ItemIsEnabled
+            | Qt.ItemFlag.ItemIsDragEnabled
+            | Qt.ItemFlag.ItemIsDropEnabled
+            | Qt.ItemFlag.ItemIsEditable
+        )
 
     def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
         if role != Qt.ItemDataRole.DisplayRole:
@@ -72,7 +77,7 @@ class DragDropPandasModel(QAbstractTableModel):
             if candidate not in existing_set and candidate != desired:
                 return candidate
             n += 1
-    
+
     def rename_column(self, col: int, new_name: str):
         new_name = (new_name or "").strip()
         if not new_name:
@@ -98,10 +103,10 @@ class DragDropPandasModel(QAbstractTableModel):
         bottom = self.df.iloc[row:]
         self.df = pd.concat([top, empty, bottom], ignore_index=True)
         self.endInsertRows()
-        
+
     def insert_row_below(self, row: int):
         self.insert_row_above(row + 1)
-        
+
     def insert_rows_above(self, row: int, count: int = 1):
         count = int(count)
         if count <= 0:
@@ -123,7 +128,7 @@ class DragDropPandasModel(QAbstractTableModel):
 
     def insert_column_right(self, col: int):
         self.insert_column_left(col + 1)
-        
+
     def insert_columns_left(self, col: int, count: int = 1):
         count = int(count)
         if count <= 0:
@@ -164,6 +169,8 @@ class DragDropPandasModel(QAbstractTableModel):
         self.df = self.df.drop(columns=drop_labels)
         self.endResetModel()
 
+    # ---------------- Drag/drop ----------------
+
     def mimeTypes(self):
         return [self.MIME_TYPE]
 
@@ -171,47 +178,95 @@ class DragDropPandasModel(QAbstractTableModel):
         mime = QMimeData()
         if not indexes:
             return mime
-        rows = sorted(set(idx.row() for idx in indexes))
-        cols = sorted(set(idx.column() for idx in indexes))
-        block = self.df.iloc[rows, cols]
-        encoded = pickle.dumps((rows, cols, block))
-        mime.setData(self.MIME_TYPE, encoded)
+
+        rows = sorted({idx.row() for idx in indexes if idx.isValid()})
+        cols = sorted({idx.column() for idx in indexes if idx.isValid()})
+        if not rows or not cols:
+            return mime
+
+        # We only need to transmit the source rect. Values come from the model itself.
+        payload = {
+            "v": 1,
+            "token": self._drag_token,
+            "r0": rows[0],
+            "r1": rows[-1],
+            "c0": cols[0],
+            "c1": cols[-1],
+        }
+        mime.setData(self.MIME_TYPE, QByteArray(json.dumps(payload).encode("utf-8")))
         return mime
 
     def dropMimeData(self, mime, action, dest_row, dest_col, parent):
         if action != Qt.DropAction.MoveAction or not mime.hasFormat(self.MIME_TYPE):
             return False
-        try:
-            rows, cols, block = pickle.loads(bytes(mime.data(self.MIME_TYPE)))  # FIX: unpack all values
-        except Exception:
-            return False
+
         if parent is not None and parent.isValid():
             dest_row = parent.row()
             dest_col = parent.column()
+
         if dest_row is None or dest_col is None or dest_row < 0 or dest_col < 0:
             return False
+
+        try:
+            payload = json.loads(bytes(mime.data(self.MIME_TYPE)).decode("utf-8"))
+        except Exception:
+            return False
+
+        if payload.get("v") != 1 or payload.get("token") != self._drag_token:
+            return False
+
+        try:
+            r0 = int(payload.get("r0", -1))
+            r1 = int(payload.get("r1", -1))
+            c0 = int(payload.get("c0", -1))
+            c1 = int(payload.get("c1", -1))
+        except Exception:
+            return False
+
+        if r0 < 0 or c0 < 0 or r1 < r0 or c1 < c0:
+            return False
+
+        height = (r1 - r0) + 1
+        width = (c1 - c0) + 1
+
+        # Clamp destination so the block fits.
+        max_row = max(0, self.rowCount() - height)
+        max_col = max(0, self.columnCount() - width)
+        dest_row = max(0, min(int(dest_row), max_row))
+        dest_col = max(0, min(int(dest_col), max_col))
+
         self.beginResetModel()
         try:
-            src_rows = list(rows)
-            src_cols = list(cols)
-            move_pairs = []
             orig = self.df.copy()
-            for r_i, sr in enumerate(src_rows):
-                for c_i, sc in enumerate(src_cols):
-                    dr = dest_row + r_i
-                    dc = dest_col + c_i
-                    if 0 <= dr < self.rowCount() and 0 <= dc < self.columnCount():
-                        move_pairs.append(((sr, sc), (dr, dc)))
+
+            # Compute move pairs for in-bounds cells only (keeps behavior stable).
+            move_pairs = []
+            for dr in range(height):
+                for dc in range(width):
+                    sr = r0 + dr
+                    sc = c0 + dc
+                    tr = dest_row + dr
+                    tc = dest_col + dc
+                    if 0 <= sr < self.rowCount() and 0 <= sc < self.columnCount():
+                        if 0 <= tr < self.rowCount() and 0 <= tc < self.columnCount():
+                            move_pairs.append(((sr, sc), (tr, tc)))
+
             if not move_pairs:
                 return False
+
             self.push_undo_state()
-            for (sr, sc), (dr, dc) in move_pairs:
-                self.df.iat[dr, dc] = orig.iat[sr, sc]
-            dest_set = set(dst for (_, dst) in move_pairs)
-            src_set = set(src for (src, _) in move_pairs)
+
+            # Copy source → dest
+            for (sr, sc), (tr, tc) in move_pairs:
+                self.df.iat[tr, tc] = orig.iat[sr, sc]
+
+            # Clear sources that did not overlap destination
+            dest_set = {dst for (_, dst) in move_pairs}
+            src_set = {src for (src, _) in move_pairs}
             for (sr, sc) in src_set:
                 if (sr, sc) not in dest_set:
                     self.df.iat[sr, sc] = ""
+
             return True
         finally:
             self.endResetModel()
@@ -219,8 +274,12 @@ class DragDropPandasModel(QAbstractTableModel):
     def supportedDropActions(self):
         return Qt.DropAction.MoveAction
 
+    # ---------------- Data access ----------------
+
     def get_dataframe(self):
         return self.df.copy()
+
+    # ---------------- Undo/redo ----------------
 
     def push_undo_state(self):
         self.undo_stack.append(self.df.copy())
@@ -237,6 +296,8 @@ class DragDropPandasModel(QAbstractTableModel):
             self.undo_stack.append(self.df.copy())
             self.df = self.redo_stack.pop()
             self.layoutChanged.emit()
+
+    # ---------------- Clipboard ops ----------------
 
     def copy_selection(self, indexes):
         if not indexes:
