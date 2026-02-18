@@ -1,16 +1,15 @@
+# workspace/create_zip.py
+from __future__ import annotations
+
 import os
-import tempfile
 import shutil
-from PySide6.QtWidgets import QDialog, QMessageBox
+import tempfile
 
 from config.schemas import CREATE_ZIP_SCHEMA
-from gui.dialogs import OptionsDialog
+from workspace.base import BaseWorkflow
 
 
-class CreateZip:
-    def __init__(self, mw):
-        self.mw = mw
-
+class CreateZip(BaseWorkflow):
     def run(self, checked: bool = False):
         files = self.mw.ask_open_files(
             "Choose files to ZIP",
@@ -19,10 +18,9 @@ class CreateZip:
         if not files:
             return
 
-        dlg = OptionsDialog(CREATE_ZIP_SCHEMA, parent=self.mw, title="ZIP Password")
-        if dlg.exec() != QDialog.Accepted:
+        opts = self.options_dialog(CREATE_ZIP_SCHEMA, title="ZIP Password")
+        if not opts:
             return
-        opts = dlg.get_results()
 
         pw_opts = opts.get("password_mode") or {}
         mode = pw_opts.get("value", "random")
@@ -32,7 +30,7 @@ class CreateZip:
         else:
             password = (pw_opts.get("password") or "").strip()
             if not password:
-                QMessageBox.warning(self.mw, "Missing password", "Please enter a password.")
+                self.warn("Missing password", "Please enter a password.")
                 return
 
         first_file = os.path.basename(files[0])
@@ -53,10 +51,10 @@ class CreateZip:
                 for fpath in files:
                     shutil.copy2(fpath, os.path.join(temp_dir, os.path.basename(fpath)))
 
-                # ZIP FIRST
+                # Create ZIP first
                 self.mw.s.packager.create_zip(temp_dir, zipfile, password)
 
-                # THEN save password.txt alongside the zip
+                # Then save password.txt alongside the zip
                 pw_txt_path = os.path.join(os.path.dirname(zipfile), "password.txt")
                 pw_warning = None
                 try:
@@ -70,17 +68,16 @@ class CreateZip:
             finally:
                 shutil.rmtree(temp_dir, ignore_errors=True)
 
-
         def on_zipped(res: dict):
             if res.get("pw_warning"):
-                QMessageBox.warning(self.mw, "Warning", res["pw_warning"])
-            self.mw.s.logger.log(f"Zip file saved successfully. Password: {res['password']}", "green")
+                self.warn("Warning", res["pw_warning"])
+            self.info(f"Zip file saved successfully. Password: {res['password']}", "green")
 
-        def on_zip_err(err_text: str):
-            if ("PermissionError" in err_text) or ("Permission Error" in err_text) or ("WinError 740" in err_text):
-                self.mw.s.logger.log("Permission Error", "red")
-                return
-            self.mw.show_error("Create ZIP failed", err_text)
-
-
-        self.mw._run_busy("Create ZIP", "Creating ZIP…", job_zip, on_done=on_zipped, on_err=on_zip_err)
+        # Use BaseWorkflow's generic busy runner
+        self.run_busy(
+            "Create ZIP",
+            "Creating ZIP…",
+            job_zip,
+            on_done=on_zipped,
+            on_err=lambda e: self.fail("Create ZIP failed", e),
+        )

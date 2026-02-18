@@ -1,16 +1,15 @@
-import os
-from PySide6.QtWidgets import QDialog, QMessageBox
+# workspace/create_file.py
+from __future__ import annotations
+
+from PySide6.QtWidgets import QMessageBox
 
 from config.schemas import CREATE_FILE_SCHEMA
 from config.seeds import seed_dict
-from gui.dialogs import OptionsDialog, PreviewDialog
+from workspace.base import BaseWorkflow
 
 
-class CreateFile:
-    def __init__(self, mw):
-        self.mw = mw  # MainWindow context
-
-    def run(self, checked: bool = False):  # clicked(bool) safety
+class CreateFile(BaseWorkflow):
+    def run(self, checked: bool = False):
         infile = self.mw.ask_open_file(
             "Choose File",
             "Files (*.csv *.txt *.f *.xls *.xlsx);;All Files (*)",
@@ -18,90 +17,74 @@ class CreateFile:
         if not infile:
             return
 
-        dlg = OptionsDialog(CREATE_FILE_SCHEMA, parent=self.mw, title="Create File Options")
-        if dlg.exec() != QDialog.Accepted:
+        opts = self.options_dialog(CREATE_FILE_SCHEMA, title="Create File Options")
+        if not opts:
             return
 
-        opts = dlg.get_results()
         header_mode = opts.get("header_cleaning", "none")
 
-        def job_load():
-            return self.mw.s.loader.load_file(infile, header_cleaning_mode=header_mode)
-
-        def on_err(err_text: str):
-            QMessageBox.critical(self.mw, "Error", err_text)
-
-        def on_loaded(result):
-            try:
-                df, has_header = result
-                if df is None:
+        def on_loaded(df, has_header: bool):
+            # -------------------- MMI --------------------
+            mmi_opts = opts.get("mmi", {}) or {}
+            if mmi_opts.get("enabled"):
+                mmi_type = mmi_opts.get("value")
+                try:
+                    if mmi_type == "Scotts":
+                        cell_name = (mmi_opts.get("cell_name") or "").strip()
+                        if not cell_name:
+                            self.warn("Missing cell name", "Scotts MMI requires a cell name.")
+                            return
+                        df_mmi = self.mw.s.transforms.append_mmi(df, "Scotts", cell_name=cell_name)
+                    else:
+                        df_mmi = self.mw.s.transforms.append_mmi(df, mmi_type)
+                    df = df_mmi
+                except Exception as e:
+                    QMessageBox.critical(self.mw, "MMI Error", str(e))
                     return
 
-                # -------------------- MMI --------------------
-                mmi_opts = opts.get("mmi", {})
-                if mmi_opts.get("enabled"):
-                    mmi_type = mmi_opts.get("value")
-                    try:
-                        if mmi_type == "Scotts":
-                            cell_name = (mmi_opts.get("cell_name") or "").strip()
-                            if not cell_name:
-                                QMessageBox.warning(
-                                    self.mw,
-                                    "Missing cell name",
-                                    "Scotts MMI requires a cell name.",
-                                )
-                                return
-                            df = self.mw.s.transforms.append_mmi(df, "Scotts", cell_name=cell_name)
-                        else:
-                            df = self.mw.s.transforms.append_mmi(df, mmi_type)
-                    except Exception as e:
-                        QMessageBox.critical(self.mw, "MMI Error", str(e))
-                        return
-
-                # -------------------- Seeds --------------------
-                seed_opts = opts.get("seeds", {})
-                if seed_opts.get("enabled"):
-                    seed_key = seed_opts.get("value")
-                    try:
-                        seed_rows = seed_dict[seed_key][1]
-                        df = self.mw.s.transforms.append_seeds(df, seed_rows)
-                    except Exception as e:
-                        QMessageBox.critical(self.mw, "Seed Error", str(e))
-                        return
-
-                # -------------------- Preview/Edit --------------------
-                preview = PreviewDialog(df, self.mw)
-                if preview.exec() != QDialog.Accepted:
-                    return
-                df = preview.get_dataframe()
-
-                # Clean newlines before save
-                df = df.map(lambda x: str(x).replace("\n", " ").strip())
-
-                delimiter = opts.get("delimiter", ",")
-                base = os.path.splitext(os.path.basename(infile))[0]
-                default_name = f"{base}.csv"
-                outfile = self.mw.ask_save_csv(
-                    "Save output file",
-                    "CSV Files (*.csv);;All Files (*)",
-                    defaultName=default_name,
-                )
-                if not outfile:
+            # -------------------- Seeds --------------------
+            seed_opts = opts.get("seeds", {}) or {}
+            if seed_opts.get("enabled"):
+                seed_key = seed_opts.get("value")
+                try:
+                    seed_rows = seed_dict[seed_key][1]
+                    df = self.mw.s.transforms.append_seeds(df, seed_rows)
+                except Exception as e:
+                    QMessageBox.critical(self.mw, "Seed Error", str(e))
                     return
 
-                def job_save():
-                    self.mw._save_csv(df, outfile, has_header=has_header, delimiter=delimiter)
-                    return True
+            # -------------------- Preview/Edit --------------------
+            edited = self.preview_dialog(df, title="Preview")
+            if edited is None:
+                return
+            df = edited
 
-                self.mw._run_busy(
-                    "Create File",
-                    "Saving file…",
-                    job_save,
-                    on_done=lambda _: self.mw.s.logger.log("File created successfully.", "green"),
-                    on_err=lambda e: QMessageBox.critical(self.mw, "Save Error", e),
-                )
+            # -------------------- Save --------------------
+            delimiter = opts.get("delimiter", ",")
+            outfile = self.ask_save_csv_default_from_infile(
+                infile,
+                title="Save output file",
+                suffix=".csv",
+                filter="CSV Files (*.csv);;All Files (*)",
+            )
+            if not outfile:
+                return
 
-            except Exception as e:
-                QMessageBox.critical(self.mw, "Error", str(e))
+            self.save_csv_then(
+                df,
+                outfile,
+                title="Create File",
+                delimiter=delimiter,
+                has_header=has_header,
+                success_msg="File created successfully.",
+                sanitize=True,  # keeps your existing newline cleanup behavior
+            )
 
-        self.mw._run_busy("Create File", "Loading file…", job_load, on_done=on_loaded, on_err=on_err)
+        # CreateFile previously did NOT call make_file_writable() on infile
+        self.load_df_then(
+            infile,
+            title="Create File",
+            header_mode=header_mode,
+            make_writable=False,
+            on_loaded=on_loaded,
+        )

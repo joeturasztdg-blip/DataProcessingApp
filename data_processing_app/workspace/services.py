@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from utils.logging_adapter import LoggerAdapter
+from utils.logging import Logger
 
 from processing.cleansing import DataCleaner
 from processing.headers import HeaderDetector
@@ -13,7 +13,7 @@ from gui.password_broker import PasswordBroker
 
 @dataclass
 class Services:
-    logger: LoggerAdapter
+    logger: Logger
     password_broker: PasswordBroker
     cleaner: DataCleaner
     headers: HeaderDetector
@@ -23,15 +23,7 @@ class Services:
 
 
 def build_services(window) -> Services:
-    """
-    Construct and wire together all shared application services
-    for the MainWindow.
-
-    `window` is passed so PasswordBroker can parent dialogs
-    and logger can emit into the UI.
-    """
-
-    logger = LoggerAdapter(lambda msg, _c=None: window.log_signal.emit(msg))
+    logger = Logger(lambda msg, _c=None: window.log_signal.emit(msg))
 
     password_broker = PasswordBroker(window)
 
@@ -44,8 +36,7 @@ def build_services(window) -> Services:
         header_detector=headers,
         cleaner=cleaner,
         logger=logger,
-        password_callback=password_broker.get_password,
-    )
+        password_callback=password_broker.get_password)
 
     return Services(
         logger=logger,
@@ -54,5 +45,4 @@ def build_services(window) -> Services:
         headers=headers,
         transforms=transforms,
         packager=packager,
-        loader=loader,
-    )
+        loader=loader)

@@ -1,43 +1,25 @@
-import os
-from PySide6.QtWidgets import QDialog, QMessageBox
+from __future__ import annotations
 
 from config.schemas import UPDATE_OUT_FILE_SCHEMA
-from gui.dialogs import OptionsDialog
+from workspace.base import BaseWorkflow
 
 
-class UpdateOutFile:
-    def __init__(self, mw):
-        self.mw = mw
-
+class UpdateOutFile(BaseWorkflow):
     def run(self, checked: bool = False):
         infile = self.mw.ask_open_file(
             "Choose CSV/TXT to update",
-            "CSV/TXT/(*.OUT.csv *.OUT.txt);;All Files (*)",
-        )
+            "CSV/TXT/(*.OUT.csv *.OUT.txt);;All Files (*)")
         if not infile:
             return
 
-        self.mw.make_file_writable(infile)
+        opts = self.options_dialog(UPDATE_OUT_FILE_SCHEMA, title="Update Out File")
+        if not opts:
+            return
 
-        def job_load():
-            return self.mw.s.loader.load_file(infile)
-
-        def on_err(err_text: str):
-            self.mw.show_error("Update OUT file failed", err_text)
-
-        def on_loaded(result):
+        def on_loaded(df, has_header: bool):
             try:
-                df, has_header = result
-                if df is None:
-                    return
-
-                dlg = OptionsDialog(UPDATE_OUT_FILE_SCHEMA, parent=self.mw, title="Update Out File")
-                if dlg.exec() != QDialog.Accepted:
-                    return
-                opts = dlg.get_results()
-
                 # ---- UCID updates ----
-                ucid_opts = opts.get("ucid_updates", {})
+                ucid_opts = opts.get("ucid_updates", {}) or {}
                 ucid_mode = ucid_opts.get("value", "none")
 
                 ucid_map = {}
@@ -56,37 +38,35 @@ class UpdateOutFile:
 
                 if ucid_map:
                     df = self.mw.s.transforms.update_UCID(df, ucid_map)
-
                 # ---- Barcode padding ----
                 padding_choice = opts.get("barcode_padding", "none")
                 if padding_choice != "none":
                     df = self.mw.s.transforms.apply_barcode_padding(df, padding_choice)
 
-                base = os.path.splitext(os.path.basename(infile))[0]
-                default_name = f"{base}.csv"
-                outfile = self.mw.ask_save_csv(
-                    "Save OUT file CSV",
-                    "CSV Files (*.csv);;All Files (*)",
-                    defaultName=default_name,
-                )
+                outfile = self.ask_save_csv_default_from_infile(
+                    infile,
+                    title="Save OUT file CSV",
+                    suffix=".csv",
+                    filter="CSV Files (*.csv);;All Files (*)")
                 if not outfile:
                     return
 
                 delimiter = opts.get("delimiter", ",")
 
-                def job_save():
-                    self.mw._save_csv(df, outfile, has_header=has_header, delimiter=delimiter)
-                    return True
-
-                self.mw._run_busy(
-                    "Update OUT File",
-                    "Saving file…",
-                    job_save,
-                    on_done=lambda _: self.mw.s.logger.log("OUT file updated successfully.", "green"),
-                    on_err=lambda e: QMessageBox.critical(self.mw, "Save Error", e),
-                )
+                self.save_csv_then(
+                    df,
+                    outfile,
+                    title="Update OUT File",
+                    delimiter=delimiter,
+                    has_header=has_header,
+                    success_msg="OUT file updated successfully.",
+                    sanitize=True)
 
             except Exception as e:
-                self.mw.show_error("Update OUT file failed", str(e))
+                self.fail_exception("Update OUT file failed", e)
 
-        self.mw._run_busy("Update OUT File", "Loading file…", job_load, on_done=on_loaded, on_err=on_err)
+        self.load_df_then(
+            infile,
+            title="Update OUT File",
+            make_writable=True,
+            on_loaded=on_loaded)
