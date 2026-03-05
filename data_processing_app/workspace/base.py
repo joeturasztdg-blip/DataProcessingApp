@@ -34,7 +34,7 @@ class BaseWorkflow:
         on_err: Optional[ErrHandler] = None,
         cancelable: bool = False):
         return self.mw._run_busy(title,message,fn,on_done=on_done,on_err=on_err or (lambda e: self.fail(title, e)),cancelable=cancelable)
-    # ---------------- Dialog helpers ----------------
+    # ---------------- helpers ----------------
     def options_dialog(self, schema, *, title: str) -> Optional[dict]:
         from gui.options_dialog import OptionsDialog
         dlg = OptionsDialog(schema, parent=self.mw, title=title)
@@ -48,10 +48,21 @@ class BaseWorkflow:
         if dlg.exec() != QDialog.Accepted:
             return None
         return dlg.get_dataframe()
-    # ---------------- Sanitization ----------------
+    
     def sanitize_df_for_export(self, df):
         return df.map(lambda x: str(x).replace("\n", " ").strip())
-    # ---------------- File chooser helpers ----------------
+    
+    def drop_empty_rows_cols(self, df):
+        import pandas as pd
+        if df is None or df.empty:
+            return df
+        tmp = df.astype(object).where(pd.notnull(df), "")
+        non_empty = tmp.astype(str).apply(lambda s: s.str.strip().ne(""))
+
+        out = df.loc[non_empty.any(axis=1), non_empty.any(axis=0)].copy()
+        out.reset_index(drop=True, inplace=True)
+        return out
+    
     def ask_save_csv_default_from_infile(self,infile: str,*,title: str,suffix: str = ".csv",filter: str = "CSV Files (*.csv);;All Files (*)") -> Optional[str]:
         import os
         base = os.path.splitext(os.path.basename(infile))[0]
@@ -83,11 +94,20 @@ class BaseWorkflow:
             df = self.sanitize_df_for_export(df)
 
         def job_save():
-            self.mw._save_csv(df, outfile, has_header=has_header, delimiter=delimiter)
-            return True
+            enc_label = self.mw._save_csv(df, outfile, has_header=has_header, delimiter=delimiter)
+            return enc_label
 
-        return self.busy(title,"Saving file…",job_save,on_done=lambda _: self.info(success_msg, "green"),
-                         on_err=lambda e: QMessageBox.critical(self.mw, "Save Error", e))
+        def done(enc_label):
+            suffix = f' (Encoding: {enc_label})' if enc_label else ""
+            self.info(f"{success_msg}{suffix}", "green")
+
+        return self.busy(
+            title,
+            "Saving file…",
+            job_save,
+            on_done=done,
+            on_err=lambda e: QMessageBox.critical(self.mw, "Save Error", e),
+        )
 
     def run_busy(self,title: str,message: str,fn: Callable[[], Any],*,success_msg: Optional[str] = None,on_done: Optional[DoneHandler] = None,
                  on_err: Optional[ErrHandler] = None,cancelable: bool = False):

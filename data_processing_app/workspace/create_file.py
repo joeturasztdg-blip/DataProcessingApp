@@ -1,23 +1,25 @@
-# workspace/create_file.py
 from __future__ import annotations
 
 from PySide6.QtWidgets import QMessageBox
 
-from config.schemas import CREATE_FILE_SCHEMA
-from config.seeds import seed_dict
+from config.schemas import build_create_file_schema
 from workspace.base import BaseWorkflow
-
 
 class CreateFile(BaseWorkflow):
     def run(self, checked: bool = False):
         infile = self.mw.ask_open_file(
             "Choose File",
-            "Files (*.csv *.txt *.f *.xls *.xlsx);;All Files (*)",
-        )
+            "Files (*.csv *.txt *.f *.xls *.xlsx);;All Files (*)",)
         if not infile:
             return
 
-        opts = self.options_dialog(CREATE_FILE_SCHEMA, title="Create File Options")
+        standard_options = self.mw.s.seeds_repo.list_seed_options("Standard")
+        bespoke_options = self.mw.s.seeds_repo.list_seed_options("Bespoke")
+        schema = build_create_file_schema(
+            standard_options=standard_options,
+            bespoke_options=bespoke_options,)
+        opts = self.options_dialog(schema, title="Create File Options")
+
         if not opts:
             return
 
@@ -41,32 +43,43 @@ class CreateFile(BaseWorkflow):
                 except Exception as e:
                     QMessageBox.critical(self.mw, "MMI Error", str(e))
                     return
-
             # -------------------- Seeds --------------------
             seed_opts = opts.get("seeds", {}) or {}
             if seed_opts.get("enabled"):
-                seed_key = seed_opts.get("value")
+                std_id = seed_opts.get("standard_seed")
+                bes_id = seed_opts.get("bespoke_seed")
                 try:
-                    seed_rows = seed_dict[seed_key][1]
-                    df = self.mw.s.transforms.append_seeds(df, seed_rows)
-                except Exception as e:
-                    QMessageBox.critical(self.mw, "Seed Error", str(e))
-                    return
+                    rows_to_add = []
+                    if std_id:
+                        rows_to_add += self.mw.s.seeds_repo.get_seed_rows(std_id)
 
+                    if bes_id and bes_id != "__none__":
+                        rows_to_add += self.mw.s.seeds_repo.get_seed_rows(bes_id)
+                    ncols = len(df.columns)
+                    if ncols == 5:
+                        self.mw.s.logger.log("Append seeds: dropping DPS column", "yellow")
+                    elif ncols == 4:
+                        self.mw.s.logger.log("Append seeds: dropping Address 2 and DPS columns","yellow")
+
+                    if rows_to_add:
+                        df = self.mw.s.transforms.append_seeds(df, rows_to_add)
+                except Exception as e:
+                    msg = str(e).strip() or "Append seeds failed"
+                    self.mw.s.logger.log(msg, "red")
+                    return
             # -------------------- Preview/Edit --------------------
             edited = self.preview_dialog(df, title="Preview")
             if edited is None:
                 return
             df = edited
-
+            df = self.drop_empty_rows_cols(edited)
             # -------------------- Save --------------------
             delimiter = opts.get("delimiter", ",")
             outfile = self.ask_save_csv_default_from_infile(
                 infile,
                 title="Save output file",
                 suffix=".csv",
-                filter="CSV Files (*.csv);;All Files (*)",
-            )
+                filter="CSV Files (*.csv);;All Files (*)",)
             if not outfile:
                 return
 
@@ -77,14 +90,11 @@ class CreateFile(BaseWorkflow):
                 delimiter=delimiter,
                 has_header=has_header,
                 success_msg="File created successfully.",
-                sanitize=True,  # keeps your existing newline cleanup behavior
-            )
+                sanitize=True)
 
-        # CreateFile previously did NOT call make_file_writable() on infile
         self.load_df_then(
             infile,
             title="Create File",
             header_mode=header_mode,
             make_writable=False,
-            on_loaded=on_loaded,
-        )
+            on_loaded=on_loaded)

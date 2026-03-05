@@ -43,11 +43,7 @@ class UpdateOutFile(BaseWorkflow):
                 if padding_choice != "none":
                     df = self.mw.s.transforms.apply_barcode_padding(df, padding_choice)
 
-                outfile = self.ask_save_csv_default_from_infile(
-                    infile,
-                    title="Save OUT file CSV",
-                    suffix=".csv",
-                    filter="CSV Files (*.csv);;All Files (*)")
+                outfile = infile
                 if not outfile:
                     return
 

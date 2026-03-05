@@ -3,14 +3,13 @@ from __future__ import annotations
 import inspect
 import threading
 from dataclasses import dataclass, field
-from typing import Callable, Any, Optional
+from typing import Any, Callable, Optional
 
 from PySide6.QtCore import QObject, Signal, Slot, QThread, Qt, QSignalBlocker
 from PySide6.QtWidgets import QProgressDialog
 
-from config.constants import BUSY_THREAD_SHUTDOWN_MS
-
 CANCELLED_MSG = "__CANCELLED__"
+
 
 def start_busy_job(
     parent,
@@ -20,7 +19,7 @@ def start_busy_job(
     fn: Callable[..., Any],
     cancelable: bool = False,
     progress_total: Optional[int] = None,
-) -> BusyJob:
+) -> "BusyJob":
     return BusyJob(
         parent,
         title=title,
@@ -30,15 +29,21 @@ def start_busy_job(
         progress_total=progress_total,
     ).start()
 
+
 class BusyWorker(QObject):
     finished = Signal(object)
     error = Signal(str)
     progress = Signal(int, int, str)
 
-    def __init__(self,fn: Callable[..., Any],total: Optional[int] = None,cancel_event: Optional[threading.Event] = None):
+    def __init__(
+        self,
+        fn: Callable[..., Any],
+        total: Optional[int] = None,
+        cancel_event: Optional[threading.Event] = None,
+    ):
         super().__init__()
         self._fn = fn
-        self._total = total or 0
+        self._total = int(total or 0)
         self._cancel = cancel_event or threading.Event()
 
     def _progress_cb(self, current: int, total: Optional[int] = None, message: str = ""):
@@ -60,38 +65,54 @@ class BusyWorker(QObject):
                 res = self._fn(self._progress_cb)
             else:
                 res = self._fn()
+
             self.finished.emit(res)
 
         except Exception as e:
             msg = str(e).strip() or "Unknown error"
+            # Preserve cancellation sentinel
             if msg == CANCELLED_MSG:
                 self.error.emit(CANCELLED_MSG)
             else:
                 self.error.emit(msg)
+
 
 class BusyJob(QObject):
     finished = Signal(object)
     error = Signal(str)
     cancel_requested = Signal()
 
-    def __init__(self,parent,*,title: str,message: str,fn: Callable[..., Any],cancelable: bool = False,progress_total: Optional[int] = None,):
+    def __init__(
+        self,
+        parent,
+        *,
+        title: str,
+        message: str,
+        fn: Callable[..., Any],
+        cancelable: bool = False,
+        progress_total: Optional[int] = None,
+    ):
         super().__init__(parent)
 
         self._title = title
         self._message = message
-        self._cancelable = cancelable
+        self._cancelable = bool(cancelable)
         self._progress_total = int(progress_total) if progress_total is not None else None
 
+        # Cancel event shared with the worker
+        self._cancel_event = threading.Event()
+
+        # IMPORTANT: QProgressDialog parent must be a QWidget (MainWindow), not a QObject.
+        # parent passed into BusyJob is MainWindow in your app.
         self.dialog = QProgressDialog(parent)
         self.dialog.setWindowTitle(title)
         self.dialog.setLabelText(message)
         self.dialog.setMinimumDuration(0)
         self.dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
 
-        self._cancel_event = threading.Event()
-
-        if cancelable:
+        if self._cancelable:
             self.dialog.setCancelButtonText("Cancel")
+            self.dialog.canceled.connect(self._on_cancel)
         else:
             self.dialog.setCancelButton(None)
 
@@ -99,19 +120,24 @@ class BusyJob(QObject):
             self.dialog.setRange(0, self._progress_total)
             self.dialog.setValue(0)
         else:
+            # Indeterminate / spinner mode
             self.dialog.setRange(0, 0)
 
-        self.thread = QThread(self)
+        # Use an un-parented thread to avoid parent/child + deleteLater redundancy.
+        self.thread = QThread()
         self.worker = BusyWorker(fn, total=self._progress_total, cancel_event=self._cancel_event)
         self.worker.moveToThread(self.thread)
 
-        self.thread.started.connect(self.worker.run)
-        self.worker.finished.connect(self._on_finished)
-        self.worker.error.connect(self._on_error)
-        self.worker.progress.connect(self._on_progress)
+        # Canonical cleanup wiring: delete worker/thread when the thread ends.
+        self.thread.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.thread.finished.connect(self.deleteLater)
 
-        if cancelable:
-            self.dialog.canceled.connect(self._on_cancel)
+        # Run worker, marshal results back via signals (queued cross-thread).
+        self.thread.started.connect(self.worker.run)
+        self.worker.progress.connect(self._on_progress)
+        self.worker.finished.connect(self._on_worker_finished)
+        self.worker.error.connect(self._on_worker_error)
 
     def start(self):
         self.dialog.show()
@@ -120,6 +146,9 @@ class BusyJob(QObject):
 
     @Slot(int, int, str)
     def _on_progress(self, current: int, total: int, message: str):
+        if self.dialog is None:
+            return
+
         if total and self.dialog.maximum() != total:
             self.dialog.setRange(0, total)
 
@@ -127,63 +156,70 @@ class BusyJob(QObject):
             self.dialog.setLabelText(message)
 
         if self.dialog.maximum() > 0:
-            self.dialog.setValue(max(0, min(current, self.dialog.maximum())))
+            self.dialog.setValue(max(0, min(int(current), int(self.dialog.maximum()))))
 
     @Slot(object)
-    def _on_finished(self, res: Any):
-        try:
-            if self.dialog.maximum() > 0:
-                self.dialog.setValue(self.dialog.maximum())
-            # Block signals so close() doesn't emit canceled()
-            blocker = QSignalBlocker(self.dialog)
-            self.dialog.close()
-            del blocker
-        except Exception:
-            pass
+    def _on_worker_finished(self, res: Any):
+        self._close_and_delete_dialog()
         self.finished.emit(res)
-        self._cleanup()
+        self._request_thread_quit()
 
     @Slot(str)
-    def _on_error(self, err_text: str):
-        try:
-            blocker = QSignalBlocker(self.dialog)
-            self.dialog.close()
-            del blocker
-        except Exception:
-            pass
+    def _on_worker_error(self, err_text: str):
+        self._close_and_delete_dialog()
         self.error.emit(err_text)
-        self._cleanup()
+        self._request_thread_quit()
 
     @Slot()
     def _on_cancel(self):
+        # Idempotent
         if self._cancel_event.is_set():
             return
 
         self._cancel_event.set()
         self.cancel_requested.emit()
 
+        # UI feedback
         try:
-            self.dialog.setLabelText("Cancelling")
-            self.dialog.setCancelButton(None)
-            self.dialog.setWindowTitle(self._title)
-            self.dialog.show()
-            self.dialog.raise_()
-            self.dialog.activateWindow()
+            if self.dialog is not None:
+                self.dialog.setLabelText("Cancelling…")
+                self.dialog.setCancelButton(None)
+                self.dialog.setWindowTitle(self._title)
+                self.dialog.show()
+                self.dialog.raise_()
+                self.dialog.activateWindow()
         except Exception:
             pass
 
-    def _cleanup(self):
+    def _request_thread_quit(self):
         try:
-            self.thread.quit()
-            self.thread.wait(BUSY_THREAD_SHUTDOWN_MS)
+            if self.thread is not None:
+                self.thread.quit()
+        except Exception:
+            # Worst case: allow object graph to die; thread cleanup is still handled by Qt when possible.
+            pass
+
+    def _close_and_delete_dialog(self):
+        dlg = getattr(self, "dialog", None)
+        if dlg is None:
+            return
+
+        try:
+            # Prevent close() from emitting canceled() and causing spurious cancellation flow
+            blocker = QSignalBlocker(dlg)
+            if dlg.maximum() > 0:
+                dlg.setValue(dlg.maximum())
+            dlg.close()
+            del blocker
         except Exception:
             pass
+
         try:
-            self.worker.deleteLater()
-            self.thread.deleteLater()
-            self.deleteLater()
+            dlg.deleteLater()
         except Exception:
             pass
+
+        self.dialog = None
 
 
 @dataclass

@@ -1,83 +1,110 @@
-# workspace/create_zip.py
 from __future__ import annotations
 
 import os
 import shutil
 import tempfile
 
-from config.schemas import CREATE_ZIP_SCHEMA
-from workspace.base import BaseWorkflow
+from PySide6.QtWidgets import QDialog
 
+from workspace.base import BaseWorkflow
+from gui.zip_dialog import ZipDialog
 
 class CreateZip(BaseWorkflow):
     def run(self, checked: bool = False):
-        files = self.mw.ask_open_files(
-            "Choose files to ZIP",
-            "All Files (*.*);;CSV Files (*.csv);;Text Files (*.txt);;Excel Files (*.xls *.xlsx)",
-        )
-        if not files:
+        dlg = ZipDialog(self.mw)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
             return
 
-        opts = self.options_dialog(CREATE_ZIP_SCHEMA, title="ZIP Password")
-        if not opts:
+        res = dlg.get_result()
+        paths: list[str] = res.get("paths") or []
+        if not paths:
             return
+        
+        first_path = paths[0]
+        
+        if os.path.isdir(first_path):
+            self.mw.update_last_input_dir(os.path.dirname(first_path))
+        else:
+            self.mw.update_last_input_dir(first_path)
 
-        pw_opts = opts.get("password_mode") or {}
-        mode = pw_opts.get("value", "random")
+        mode = res.get("password_mode")
 
         if mode == "random":
             password = self.mw.s.packager.generate_password()
-        else:
-            password = (pw_opts.get("password") or "").strip()
+        elif mode == "enter":
+            password = (res.get("password") or "").strip()
             if not password:
                 self.warn("Missing password", "Please enter a password.")
                 return
+        else:
+            password = ""
 
-        first_file = os.path.basename(files[0])
-        base = ".".join(first_file.split(".")[:-2]) or first_file.split(".")[0]
-        default_zip_name = f"{base} DATA.zip"
+        first_path = paths[0].rstrip("\\/")
+
+        parent_dir = os.path.dirname(first_path)
+
+        folder_name = os.path.basename(parent_dir)
+        
+        default_zip_name = f"{folder_name}_SORTED_DATA.zip"
 
         zipfile = self.mw.ask_save_csv(
             "Save encrypted ZIP as",
             "ZIP Files (*.zip);;All Files (*)",
-            defaultName=default_zip_name,
-        )
+            defaultName=default_zip_name)
         if not zipfile:
             return
 
         def job_zip():
-            temp_dir = tempfile.mkdtemp(prefix="mail_pipeline_zip_")
+            def norm(p: str) -> str:
+                return p.rstrip("\\/")
+
+            norm_paths = [norm(p) for p in paths]
+
+            pw_txt_path = os.path.join(os.path.dirname(zipfile), f"{folder_name} password.txt")
+            pw_warning = None
+
             try:
-                for fpath in files:
-                    shutil.copy2(fpath, os.path.join(temp_dir, os.path.basename(fpath)))
+                # Attempt to find a common root so the zip stores nice relative paths
+                common_root = os.path.commonpath(norm_paths)
 
-                # Create ZIP first
-                self.mw.s.packager.create_zip(temp_dir, zipfile, password)
+                # If the common path is a file, use its directory
+                if not os.path.isdir(common_root):
+                    common_root = os.path.dirname(common_root)
 
-                # Then save password.txt alongside the zip
-                pw_txt_path = os.path.join(os.path.dirname(zipfile), "password.txt")
-                pw_warning = None
-                try:
-                    with open(pw_txt_path, "w", encoding="utf-8") as f:
-                        f.write(password)
-                except Exception as e:
-                    pw_warning = f"Could not save password to {pw_txt_path}:\n{e}"
+                rel_items = [os.path.relpath(p, common_root) for p in norm_paths]
 
-                return {"password": password, "pw_warning": pw_warning}
+                self.mw.s.packager.create_zip(
+                    common_root,
+                    zipfile,
+                    password,
+                    paths=rel_items
+                )
 
-            finally:
-                shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception:
+                # Happens if files are on different drives or commonpath fails
+                # Fall back to absolute paths
+                self.mw.s.packager.create_zip(
+                    "",
+                    zipfile,
+                    password,
+                    paths=norm_paths
+                )
 
-        def on_zipped(res: dict):
-            if res.get("pw_warning"):
-                self.warn("Warning", res["pw_warning"])
-            self.info(f"Zip file saved successfully. Password: {res['password']}", "green")
+            try:
+                with open(pw_txt_path, "w", encoding="utf-8") as f:
+                    f.write(password)
+            except Exception as e:
+                pw_warning = f"Could not save password to {pw_txt_path}:\n{e}"
 
-        # Use BaseWorkflow's generic busy runner
-        self.run_busy(
-            "Create ZIP",
-            "Creating ZIP…",
-            job_zip,
-            on_done=on_zipped,
-            on_err=lambda e: self.fail("Create ZIP failed", e),
-        )
+            return {"password": password, "pw_warning": pw_warning}
+        
+        def on_zipped(res_out: dict):
+            if res_out.get("pw_warning"):
+                self.warn("Warning", res_out["pw_warning"])
+
+            if res_out.get("password"):
+                self.info(f"Zip file saved successfully. Password: {res_out['password']}", "green")
+            else:
+                self.info("Zip file saved successfully.", "green")
+
+        self.run_busy("Create ZIP","Creating ZIP…",job_zip,on_done=on_zipped,on_err=lambda e: self.fail("Create ZIP failed", e))
