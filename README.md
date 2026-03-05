@@ -16,61 +16,63 @@ Project layout:
 DATA_PROCESSING_APP/
 
 ├── main.py
-
+│
 ├── config/
-
 │   ├── __init__.py
-
 │   ├── constants.py
-
 │   ├── schemas.py
-
-│   └── seeds.py
-
+│   ├── mailmark_logins.db
+│   ├── mixed_weight_logins.db
+│   ├── postcodes.db
+│   └── seeds.db
+│
 ├── gui/
-
 │   ├── __init__.py
-
-│   ├── dialogs.py
-
-│   ├── main_window.py
-
 │   ├── models.py
-
+│   ├── options_dialog.py
 │   ├── password_broker.py
-
-│   ├── progress.py
-
-│   └── table.py
-
+│   ├── preview_dialog.py
+│   ├── printing_dialog.py
+│   ├── table.py
+│   ├── window.py
+│   └── zip_dialog.py
+│
 ├── processing/
-
 │   ├── __init__.py
-
 │   ├── cleansing.py
-
+│   ├── database.py
 │   ├── headers.py
-
 │   ├── loading.py
-
 │   ├── packaging.py
-
-│   └── transforms.py
-
-└── utils/
-
-│    ├── __init__.py
-    
-│    ├── col_utils.py
-    
-│    ├── formatting.py
-    
-│    ├── logging_adapter.py
-    
-│    ├── pdf_utils.py
-    
-│    └── row_utils.py
-    
+│   ├── pdf_labels.py
+│   ├── transforms.py
+│   │
+│   └── repos/
+│       ├── __init__.py
+│       ├── login_repo.py
+│       ├── postcodes_repo.py
+│       └── seeds_repo.py
+│
+├── utils/
+│   ├── __init__.py
+│   ├── logging.py
+│   ├── print_utils.py
+│   └── table_utils.py
+│
+└── workspace/
+    ├── __init__.py
+    ├── base.py
+    ├── create_ecommerce_file.py
+    ├── create_file.py
+    ├── create_zip.py
+    ├── format_csv.py
+    ├── generate_password.py
+    ├── jobs.py
+    ├── print_pdf.py
+    ├── query_databases.py
+    ├── services.py
+    ├── split_file.py
+    └── update_out_file.py
 
 Requirements:
 Python 3.10 or newer
