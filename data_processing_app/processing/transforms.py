@@ -8,17 +8,25 @@ class DomainTransforms:
             return df
 
         ncols = len(df.columns)
+        if ncols < 4:
+            raise RuntimeError("Append seeds failed, too few columns")
 
-        padded_seeds = [
-            s + [""] * max(0, ncols - len(s))
-            for s in seeds
-        ]
-
-        seed_df = pd.DataFrame(
-            padded_seeds,
-            columns=list(df.columns)[:ncols]
-        )
-
+        def adapt_seed_row(row: list):
+            row = list(row or [])
+            if ncols == 5:
+                base = row[:5]
+            elif ncols == 4:
+                base = []
+                if len(row) > 0: base.append(row[0])
+                if len(row) > 1: base.append(row[1])
+                if len(row) > 3: base.append(row[3])
+                if len(row) > 4: base.append(row[4])
+            else:
+                base = row[:]
+            base = base[:ncols] + [""] * max(0, ncols - len(base))
+            return base
+        padded_seeds = [adapt_seed_row(s) for s in seeds]
+        seed_df = pd.DataFrame(padded_seeds, columns=list(df.columns)[:ncols])
         return pd.concat([df, seed_df], ignore_index=True)
 
     def append_mmi(self, df: pd.DataFrame, choice, cell_name=None, new_col="MMI"):
@@ -27,8 +35,7 @@ class DomainTransforms:
             col_c = df.columns[2] if len(df.columns) > 2 else df.columns[0]
             df[new_col] = (
                 "Y|" + df[col_a].astype(str).str.strip()
-                + "|" + df[col_c].astype(str).str.strip()
-            )
+                + "|" + df[col_c].astype(str).str.strip())
 
         elif choice == "Scotts":
             if not cell_name:
@@ -44,12 +51,9 @@ class DomainTransforms:
                 df[col_g].astype(str).str.strip().str[:-12]
                 + "00"
                 + df[col_a].astype(str).str.strip()
-                + df[col_b].astype(str).str.strip().str[1:]
-            )
-
+                + df[col_b].astype(str).str.strip().str[1:])
         else:
             raise ValueError(f"Unknown MMI choice: {choice}")
-
         return df
 
     @staticmethod
@@ -66,8 +70,7 @@ class DomainTransforms:
     def apply_barcode_padding(
         df: pd.DataFrame,
         padding_char: str,
-        barcode_column: str = "BarcodeData"
-    ) -> pd.DataFrame:
+        barcode_column: str = "BarcodeData") -> pd.DataFrame:
         if barcode_column not in df.columns:
             return df
 

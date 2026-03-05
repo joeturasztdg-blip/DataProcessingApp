@@ -55,8 +55,6 @@ class DataCleaner:
             header = str(col).strip()
             is_placeholder = (not header) or (re.fullmatch(r"Column\d+", header) is not None)
 
-            # df[col] can be a DataFrame if there are duplicate column names,
-            # in which case .isna().all() returns a Series -> reduce to a bool.
             col_all_na = df[col].isna().all()
             if hasattr(col_all_na, "all"):
                 col_all_na = col_all_na.all()
