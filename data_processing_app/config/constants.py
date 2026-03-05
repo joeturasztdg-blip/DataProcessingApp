@@ -5,7 +5,6 @@ DELIMITER_OPTIONS = [("Comma (,)", ","),
                      ("Tab", "\t"),
                      ("Pipe (|)", "|")]
 
-SPLIT_MAX_UNIQUE = 20
 # =========================
 # PRINTING CONSTANTS
 # =========================
