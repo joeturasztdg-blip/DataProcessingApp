@@ -9,13 +9,16 @@ from PySide6.QtCore import Qt, Signal
 from workspace.services import build_services
 from workspace.jobs import JobRunner, CANCELLED_MSG
 
-from workspace.change_delim import ChangeDelimiter
+from workspace.format_csv import FormatCSV
 from workspace.create_file import CreateFile
 from workspace.split_file import SplitFile
+from workspace.create_ecommerce_file import CreateEcommerceFile
 from workspace.update_out_file import UpdateOutFile
 from workspace.create_zip import CreateZip
 from workspace.generate_password import GeneratePassword
 from workspace.print_pdf import PrintPdf
+from workspace.query_databases import QueryDatabases
+
 
 class MainWindow(QWidget):
     log_signal = Signal(str)
@@ -47,18 +50,22 @@ class MainWindow(QWidget):
         self.s = build_services(self)
         self.jobs = JobRunner(self)
         # ---- Workflows ----
-        self.change_delim = ChangeDelimiter(self)
+        self.query_databases = QueryDatabases(self)
+        self.format_csv = FormatCSV(self)
         self.create_file = CreateFile(self)
         self.split_file = SplitFile(self)
+        self.create_ecommerce_file = CreateEcommerceFile(self)
         self.update_out_file = UpdateOutFile(self)
         self.create_zip = CreateZip(self)
         self.generate_password = GeneratePassword(self)
         self.print_pdf = PrintPdf(self)
         # ---- Actions (buttons + wiring) ----
         actions = [
-            ("btn_change_delim", "Change CSV Delimiter", self.change_delim.run),
-            ("btn_create_file", "Create file", self.create_file.run),
-            ("btn_split_file", "Split file", self.split_file.run),
+            ("btn_query_databases", "Logins and Seeds", self.query_databases.run),
+            ("btn_format_csv", "Edit CSV Format", self.format_csv.run),
+            ("btn_create_file", "Create Mailing File", self.create_file.run),
+            ("btn_split_file", "Split Mailing File", self.split_file.run),
+            ("btn_create_ecommerce_file", "Create E-Commerce File", self.create_ecommerce_file.run),
             ("btn_update_out_file", "Update .OUT file", self.update_out_file.run),
             ("btn_create_zip", "Create ZIP", self.create_zip.run),
             ("btn_generate_random_password", "Generate Random Password", self.generate_password.run),
@@ -128,9 +135,45 @@ class MainWindow(QWidget):
                 os.chmod(path, attrs | stat.S_IWRITE)
 
     def _save_csv(self, df, filename, has_header=True, delimiter=","):
-        df.to_csv(filename, index=False, header=has_header, sep=delimiter)
+        def _can_encode_cp1252(s: str) -> bool:
+            try:
+                s.encode("cp1252", errors="strict")
+                return True
+            except UnicodeEncodeError:
+                return False
 
-    def _run_busy(self,title: str,message: str,fn,on_done=None,on_err=None,cancelable: bool = False,progress_total=None,):
+        if has_header:
+            for c in df.columns:
+                if not _can_encode_cp1252(str(c)):
+                    encoding = "utf-8"
+                    label = "UTF-8"
+                    break
+            else:
+                encoding = "cp1252"
+                label = "ANSI (cp1252)"
+        else:
+            encoding = "cp1252"
+            label = "ANSI (cp1252)"
+
+        if encoding == "cp1252":
+            for col in df.columns:
+                for v in df[col].astype(str).tolist():
+                    if v and (not _can_encode_cp1252(v)):
+                        encoding = "utf-8"
+                        label = "UTF-8"
+                        break
+                if encoding != "cp1252":
+                    break
+
+        df.to_csv(
+            filename,
+            index=False,
+            header=has_header,
+            sep=delimiter,
+            encoding=encoding)
+        return label
+
+    def _run_busy(self,title: str,message: str,fn,on_done=None,on_err=None,cancelable: bool = False,progress_total=None):
         self.set_actions_enabled(False)
         cancelled = {"flag": False}
 
@@ -151,6 +194,7 @@ class MainWindow(QWidget):
                 self.show_error(title, err_text)
 
         job = self.jobs.run(title,message,fn,on_done=done_wrapper,on_err=err_wrapper,cancelable=cancelable,progress_total=progress_total,)
+
         try:
             def _mark_cancelled():
                 cancelled["flag"] = True
@@ -159,4 +203,5 @@ class MainWindow(QWidget):
             job.cancel_requested.connect(_mark_cancelled)
         except Exception:
             pass
+
         return job

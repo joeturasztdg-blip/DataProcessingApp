@@ -14,10 +14,9 @@ class DragDropPandasModel(QAbstractTableModel):
 
     def __init__(self, df: pd.DataFrame):
         super().__init__()
-        self.df = df.copy()
+        self.df = df
         self.undo_stack = []
         self.redo_stack = []
-        # Token prevents accepting drags from other model instances / foreign sources.
         self._drag_token = secrets.token_hex(16)
 
     def rowCount(self, parent=None):

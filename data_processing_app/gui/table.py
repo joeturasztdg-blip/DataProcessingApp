@@ -47,11 +47,6 @@ class DragDropTableView(QTableView):
         br = self.visualRect(self.model().index(r1, c1))
         return tl.united(br)
 
-    def _point_on_rect_edge(self, pt: QPoint, rect: QRect) -> bool:
-        outer = rect.adjusted(-TABLE_EDGE_GRAB_PX, -TABLE_EDGE_GRAB_PX, TABLE_EDGE_GRAB_PX, TABLE_EDGE_GRAB_PX)
-        inner = rect.adjusted(TABLE_EDGE_GRAB_PX, TABLE_EDGE_GRAB_PX, -TABLE_EDGE_GRAB_PX, -TABLE_EDGE_GRAB_PX)
-        return outer.contains(pt) and (not inner.contains(pt))
-
     def _update_drag_arming_and_cursor(self, pos: QPoint):
         rect = self._selection_rect()
         if rect is None:
@@ -59,7 +54,6 @@ class DragDropTableView(QTableView):
             self.unsetCursor()
             return
 
-        # Arm drag ONLY when the cursor is inside the selected rectangle.
         if rect.contains(pos):
             self._drag_armed = True
             self.setCursor(Qt.CursorShape.SizeAllCursor)
