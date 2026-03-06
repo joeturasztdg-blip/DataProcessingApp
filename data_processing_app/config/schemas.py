@@ -61,14 +61,86 @@ def _seed_block(*, standard_options, bespoke_options, toggle_off_text, toggle_on
         },
     }
 
-def build_create_ecommerce_file_schema(*, column_options: list[tuple[str, str]]):
+def build_create_ecommerce_file_schema(*, column_options, preview_rows=None):
     return [
         {
-            "type": "select",
-            "key": "postcode_column",
-            "label": "Postcode column",
-            "options": column_options,
-            "default": "__select__",
+            "type": "table_preview",
+            "key": "file_preview",
+            "label": "Preview (first 10 rows)",
+            "rows": preview_rows or [],
+        },
+        {
+            "type": "section",
+            "label": "Address Fields (Fields marked with * are mandatory)",
+            "children": [
+                {
+                    "type": "range_select",
+                    "key": "address_fields",
+                    "start_key": "address_start",
+                    "end_key": "address_end",
+                    "start_label": "Address Start*",
+                    "end_label": "Address End*",
+                    "options": column_options,
+                    "default_start": "__select__",
+                    "default_end": "__select__",
+                    "required_keys": ["address_start", "address_end"],
+                },
+                {
+                    "type": "compact_select_row",
+                    "children": [
+                        {
+                            "type": "compact_select",
+                            "key": "postcode_column",
+                            "label": "Postcode*",
+                            "options": column_options,
+                            "default": "__select__",
+                            "required": True,
+                        },
+                        {
+                            "type": "compact_select",
+                            "key": "town_column",
+                            "label": "Town*",
+                            "options": column_options,
+                            "default": "__select__",
+                            "required": True,
+                        },
+                        {
+                            "type": "compact_select",
+                            "key": "county_column",
+                            "label": "County",
+                            "options": column_options,
+                            "default": "__select__",
+                            "required": False,
+                        },
+                    ],
+                },
+            ],
+        },
+        {
+            "type": "section",
+            "label": "Information",
+            "children": [
+                {
+                    "type": "switch_with_extras",
+                    "key": "reference_mode",
+                    "default": "a",
+                    "state_name_a": "Select Reference Column",
+                    "state_name_b": "Enter Reference",
+                    "control_a": {
+                        "type": "compact_select",
+                        "key": "reference_column",
+                        "label": "",
+                        "options": column_options,
+                        "default": "__select__",
+                    },
+                    "control_b": {
+                        "type": "text",
+                        "key": "reference_text",
+                        "label": "",
+                        "default": "",
+                    },
+                },
+            ],
         },
         {
             "type": "radio",
