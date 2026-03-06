@@ -4,8 +4,12 @@ from typing import Any, Callable, Dict, Iterable, Optional, Tuple
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeyEvent
-from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QPushButton,QRadioButton,QComboBox,QLineEdit,QLabel,
-                               QGroupBox,QDialog,QScrollArea,QCheckBox,QToolButton,QFrame,QStyle,QStackedLayout)
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QRadioButton, QComboBox,
+    QLineEdit, QLabel, QGroupBox, QDialog, QScrollArea, QCheckBox,
+    QToolButton, QFrame, QStyle, QStackedLayout, QTableWidget,
+    QTableWidgetItem, QAbstractItemView, QHeaderView
+)
 
 class OptionsDialog(QDialog):
     def __init__(self, schema: list[dict], parent=None, title: str = "Options"):
@@ -32,7 +36,8 @@ class OptionsDialog(QDialog):
         self._multi_rows: dict[str, dict[object, QCheckBox]] = {}   # key -> value -> checkbox
         self._mutex_groups: dict[str, list[str]] = {}              # group -> list of multi_select keys
         
-
+        self._required_keys: set[str] = set()
+        self._ok_button: QPushButton | None = None
 
         self.main_layout = QVBoxLayout(self)
         self._build_ui()
@@ -40,18 +45,28 @@ class OptionsDialog(QDialog):
         self._add_dialog_buttons()
 
     # ---------------- UI assembly ----------------
-    def _build_ui(self) -> None:
-        builders = {
+    def _builders(self):
+        return {
             "radio": self._build_radio,
             "radio_with_extras": self._build_radio_with_extras,
             "select": self._build_select,
+            "text": self._build_text,
+            "compact_select": self._build_compact_select,
+            "compact_select_row": self._build_compact_select_row,
             "toggle_select": self._build_toggle_select,
+            "switch_with_extras": self._build_switch_with_extras,
             "multi_select": self._build_multi_select,
-            "number": self._build_number
+            "number": self._build_number,
+            "range_select": self._build_range_select,
+            "table_preview": self._build_table_preview,
+            "section": self._build_section,
         }
+    
+    def _build_ui(self) -> None:
+        builders = self._builders()
 
         inserted_pager_groups: set[str] = set()
-        active_group: str | None = None  # current page_group block we are inside
+        active_group: str | None = None
 
         for cfg in self.schema:
             group = cfg.get("page_group")
@@ -82,21 +97,24 @@ class OptionsDialog(QDialog):
             inserted_pager_groups.add(active_group)
 
         self._refresh_dynamic_controls()
+        self._refresh_required_state()
     
     def _add_dialog_buttons(self) -> None:
         btns = QHBoxLayout()
         btns.addStretch()
 
         btn_cancel = QPushButton("Cancel")
-        btn_ok = QPushButton("Continue")
-        btn_ok.setDefault(True)
+        self._ok_button = QPushButton("Continue")
+        self._ok_button.setDefault(True)
 
         btn_cancel.clicked.connect(self.reject)
-        btn_ok.clicked.connect(self.accept)
+        self._ok_button.clicked.connect(self.accept)
 
         btns.addWidget(btn_cancel)
-        btns.addWidget(btn_ok)
+        btns.addWidget(self._ok_button)
         self.main_layout.addLayout(btns)
+
+        self._refresh_required_state()
 
     # ----------------Helpers----------------
     @staticmethod
@@ -246,7 +264,69 @@ class OptionsDialog(QDialog):
                 else:
                     cb.setEnabled(True)
                     stack.setCurrentWidget(cb)
-    # ---------------- Extras engine ----------------
+    
+    def _register_required_key(self, key: str) -> None:
+        if key:
+            self._required_keys.add(str(key))
+
+    def _is_missing_required_value(self, value) -> bool:
+        if value is None:
+            return True
+        if isinstance(value, str):
+            return value.strip() in ("", "__select__")
+        return False
+
+    def _refresh_required_state(self) -> None:
+        if self._ok_button is None:
+            return
+
+        for key in self._required_keys:
+            getter = self.controls.get(key)
+            if not callable(getter):
+                continue
+            if self._is_missing_required_value(getter()):
+                self._ok_button.setEnabled(False)
+                return
+
+        self._ok_button.setEnabled(True)
+    # ---------------- Builders ----------------
+    def _build_text(self, cfg: dict) -> QWidget:
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        label_text = str(cfg.get("label", "")).strip()
+        if label_text:
+            layout.addWidget(QLabel(label_text))
+
+        edit = QLineEdit()
+        edit.setText(str(cfg.get("default", "")))
+
+        placeholder = cfg.get("placeholder")
+        if placeholder is not None:
+            edit.setPlaceholderText(str(placeholder))
+
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        row.addWidget(edit)
+        row.addStretch()
+
+        layout.addLayout(row)
+
+        key = cfg["key"]
+        self.controls[key] = lambda: edit.text().strip()
+        self._controls_widgets[key] = container
+
+        if cfg.get("required"):
+            self._register_required_key(key)
+
+        edit.textChanged.connect(self._refresh_required_state)
+        edit.textChanged.connect(self._refresh_dynamic_controls)
+
+        return container
+    
     def _build_extras_controller(
         self,
         *,
@@ -269,7 +349,12 @@ class OptionsDialog(QDialog):
                     row.addWidget(QLabel(extra.get("label", "")))
 
                     edit = QLineEdit()
+                    edit.setText(str(extra.get("default", "")))
                     edit.setEnabled(False)
+
+                    placeholder = extra.get("placeholder")
+                    if placeholder is not None:
+                        edit.setPlaceholderText(str(placeholder))
 
                     row.addWidget(edit)
                     target_layout.addLayout(row)
@@ -318,7 +403,6 @@ class OptionsDialog(QDialog):
 
         return update_state, read_extras
 
-    # ---------------- Builders ----------------
     def _build_radio(self, cfg: dict) -> QGroupBox:
         box = QGroupBox(cfg["label"])
         layout = QVBoxLayout(box)
@@ -450,6 +534,106 @@ class OptionsDialog(QDialog):
         self.controls[cfg["key"]] = read
         return box
 
+    def _build_switch_with_extras(self, cfg: dict) -> QWidget:
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+
+        key = str(cfg["key"])
+        default_mode = "b" if str(cfg.get("default", "a")).lower() == "b" else "a"
+
+        state_name_a = str(cfg.get("state_name_a", "Option A"))
+        state_name_b = str(cfg.get("state_name_b", "Option B"))
+
+        top_row = QHBoxLayout()
+        top_row.setContentsMargins(0, 0, 0, 0)
+        top_row.setSpacing(8)
+
+        toggle = QCheckBox()
+        toggle.setChecked(default_mode == "b")
+        toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        toggle.setStyleSheet("""
+            QCheckBox {
+                spacing: 0px;
+            }
+
+            QCheckBox::indicator {
+                width: 46px;
+                height: 24px;
+                border-radius: 12px;
+                background-color: #4b5563;
+                border: 1px solid #1f2937;
+            }
+
+            QCheckBox::indicator:checked {
+                background-color: #22c55e;
+                border: 1px solid #166534;
+            }
+        """)
+        top_row.addWidget(toggle)
+
+        state_text_label = QLabel()
+        top_row.addWidget(state_text_label)
+        top_row.addStretch()
+
+        layout.addLayout(top_row)
+
+        stack_host = QWidget()
+        stack = QStackedLayout(stack_host)
+        stack.setContentsMargins(0, 0, 0, 0)
+
+        control_a_cfg = dict(cfg.get("control_a") or {})
+        control_b_cfg = dict(cfg.get("control_b") or {})
+
+        if not control_a_cfg or not control_b_cfg:
+            raise ValueError("switch_with_extras requires both 'control_a' and 'control_b'")
+
+        builders = self._builders()
+
+        type_a = control_a_cfg.get("type")
+        type_b = control_b_cfg.get("type")
+
+        builder_a = builders.get(type_a)
+        builder_b = builders.get(type_b)
+
+        if not builder_a:
+            raise ValueError(f"Unsupported switch_with_extras control_a type: {type_a!r}")
+        if not builder_b:
+            raise ValueError(f"Unsupported switch_with_extras control_b type: {type_b!r}")
+
+        widget_a = builder_a(control_a_cfg)
+        widget_b = builder_b(control_b_cfg)
+
+        stack.addWidget(widget_a)
+        stack.addWidget(widget_b)
+
+        layout.addWidget(stack_host)
+
+        def current_mode():
+            return "b" if toggle.isChecked() else "a"
+
+        def apply_state():
+            mode = current_mode()
+
+            if mode == "b":
+                stack.setCurrentIndex(1)
+                state_text_label.setText(state_name_b)
+            else:
+                stack.setCurrentIndex(0)
+                state_text_label.setText(state_name_a)
+
+            self._refresh_dynamic_controls()
+            self._refresh_required_state()
+
+        self.controls[key] = current_mode
+        self._controls_widgets[key] = container
+
+        toggle.toggled.connect(apply_state)
+
+        apply_state()
+        return container
+
     def _build_select(self, cfg: dict) -> QGroupBox:
         box = QGroupBox(cfg["label"])
         layout = QVBoxLayout(box)
@@ -466,6 +650,103 @@ class OptionsDialog(QDialog):
 
         combo.currentIndexChanged.connect(self._refresh_dynamic_controls)
         return box
+
+    def _build_compact_select(self, cfg: dict) -> QWidget:
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        label = QLabel(cfg.get("label", "Select"))
+        layout.addWidget(label)
+
+        combo = QComboBox()
+        for text, value in self._iter_options(cfg.get("options", [])):
+            combo.addItem(str(text), value)
+
+        default = cfg.get("default")
+        if default is not None:
+            idx = combo.findData(default)
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        row.addWidget(combo)
+        row.addStretch()
+        layout.addLayout(row)
+
+        self.controls[cfg["key"]] = combo.currentData
+        if cfg.get("required"):
+            self._register_required_key(cfg["key"])
+
+        combo.currentIndexChanged.connect(self._refresh_required_state)
+
+        return container
+
+    def _build_range_select(self, cfg: dict) -> QWidget:
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        options = cfg.get("options", [])
+
+        start_key = cfg.get("start_key", f'{cfg["key"]}_start')
+        end_key = cfg.get("end_key", f'{cfg["key"]}_end')
+
+        start_combo = QComboBox()
+        end_combo = QComboBox()
+
+        for text, value in self._iter_options(options):
+            start_combo.addItem(str(text), value)
+            end_combo.addItem(str(text), value)
+
+        start_default = cfg.get("default_start")
+        if start_default is not None:
+            idx = start_combo.findData(start_default)
+            if idx >= 0:
+                start_combo.setCurrentIndex(idx)
+
+        end_default = cfg.get("default_end")
+        if end_default is not None:
+            idx = end_combo.findData(end_default)
+            if idx >= 0:
+                end_combo.setCurrentIndex(idx)
+
+        start_col = QVBoxLayout()
+        start_col.setContentsMargins(0, 0, 0, 0)
+        start_col.setSpacing(2)
+        start_col.addWidget(QLabel(cfg.get("start_label", "Address start")))
+        start_col.addWidget(start_combo)
+
+        end_col = QVBoxLayout()
+        end_col.setContentsMargins(0, 0, 0, 0)
+        end_col.setSpacing(2)
+        end_col.addWidget(QLabel(cfg.get("end_label", "Address end")))
+        end_col.addWidget(end_combo)
+
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        row.addLayout(start_col)
+        row.addWidget(QLabel("-"))
+        row.addLayout(end_col)
+        row.addStretch()
+
+        layout.addLayout(row)
+
+        self.controls[start_key] = start_combo.currentData
+        self.controls[end_key] = end_combo.currentData
+        
+        for key in cfg.get("required_keys", []):
+            self._register_required_key(key)
+
+        start_combo.currentIndexChanged.connect(self._refresh_required_state)
+        end_combo.currentIndexChanged.connect(self._refresh_required_state)
+
+        return container
 
     def _build_toggle_select(self, cfg: dict) -> QGroupBox:
         box = QGroupBox(cfg["label"])
@@ -719,6 +1000,78 @@ class OptionsDialog(QDialog):
                 self._sync_item_split_numbers("items_file1")
 
         return box
+    
+    def _build_table_preview(self, cfg: dict) -> QGroupBox:
+        box = QGroupBox(cfg.get("label", "Preview"))
+        layout = QVBoxLayout(box)
+
+        rows = cfg.get("rows", []) or []
+
+        table = QTableWidget()
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        table.setAlternatingRowColors(True)
+
+        if rows:
+            columns = list(rows[0].keys())
+
+            table.setColumnCount(len(columns))
+            table.setRowCount(len(rows))
+            table.setHorizontalHeaderLabels([str(c) for c in columns])
+
+            for r, row in enumerate(rows):
+                for c, col in enumerate(columns):
+                    value = row.get(col, "")
+                    item = QTableWidgetItem("" if value is None else str(value))
+                    table.setItem(r, c, item)
+
+            header = table.horizontalHeader()
+            header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+            header.setStretchLastSection(True)
+            table.verticalHeader().setVisible(False)
+        else:
+            table.setColumnCount(0)
+            table.setRowCount(0)
+
+        visible_rows = min(max(len(rows), 1), 10)
+        row_height = table.verticalHeader().defaultSectionSize() if table.rowCount() else 30
+        header_height = table.horizontalHeader().height()
+        frame_height = 8
+        table.setMinimumHeight((visible_rows * row_height) + header_height + frame_height)
+        table.setMaximumHeight((visible_rows * row_height) + header_height + frame_height + 4)
+
+        layout.addWidget(table)
+
+        return box
+    
+    def _build_section(self, cfg: dict) -> QGroupBox:
+        box = QGroupBox(cfg.get("label", "Section"))
+        layout = QVBoxLayout(box)
+
+        builders = self._builders()
+
+        for child in cfg.get("children", []):
+            t = child.get("type")
+            builder = builders.get(t)
+            if not builder:
+                raise ValueError(f"Unsupported section child type: {t!r}")
+            layout.addWidget(builder(child))
+
+        return box
+    
+    def _build_compact_select_row(self, cfg: dict) -> QWidget:
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        for child in cfg.get("children", []):
+            child_widget = self._build_compact_select(child)
+            layout.addWidget(child_widget)
+
+        layout.addStretch()
+        return container
     # ---------------- Pager ----------------
     def _ensure_pager_group(self, group: str) -> None:
         if group in self._pagers:

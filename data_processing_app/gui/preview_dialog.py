@@ -2,7 +2,7 @@ from PySide6.QtWidgets import QVBoxLayout, QPushButton, QInputDialog, QDialog, Q
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeyEvent
 
-from gui.models import DragDropPandasModel
+from gui.pandas_model import DragDropPandasModel
 from gui.table import DragDropTableView
 
 from config.constants import PREVIEW_HEIGHT, PREVIEW_WIDTH
