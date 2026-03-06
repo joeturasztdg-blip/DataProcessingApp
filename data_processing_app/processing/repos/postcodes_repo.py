@@ -39,3 +39,13 @@ class PostcodesRepository:
                 found.update(str(r["pc"]) for r in cur.fetchall())
 
         return found
+    
+    def insert_postcode(self, postcode):
+
+        postcode = postcode.strip().upper()
+
+        with self._connect() as con:
+            con.execute(
+                "INSERT OR IGNORE INTO postcodes(postcode) VALUES (?)",
+                (postcode,)
+            )
