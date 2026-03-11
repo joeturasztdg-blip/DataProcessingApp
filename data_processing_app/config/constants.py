@@ -5,6 +5,63 @@ DELIMITER_OPTIONS = [("Comma (,)", ","),
                      ("Tab", "\t"),
                      ("Pipe (|)", "|")]
 
+ECOMMERCE_HEADER_SYNONYMS: dict[str, list[str]] = {
+    "postcode_column": [
+        "postcode", "post code", "postal code", "zip", "zip code",
+        "mailing postcode", "mailing post code",
+    ],
+    "town_column": [
+        "town", "city", "post town", "mailing town",
+    ],
+    "county_column": [
+        "county", "mailing county", "province", "state", "region",
+    ],
+    "name_column": [
+        "recipient name", "formatted name", "full name", "name",
+        "first name", "forename", "recipient",
+    ],
+    "surname_column": [
+        "surname", "last name", "family name", "second name",
+    ],
+    "company_column": [
+        "company", "organisation", "organization", "business name", "company name",
+    ],
+    "reference_column": [
+        "client item reference", "item reference", "order reference",
+        "customer reference", "reference", "ref",
+    ],
+    "service_column": [
+        "delivery service", "service code", "service", "shipping service",
+    ],
+    "weight_column": [
+        "parcel weight", "item weight", "weight", "package weight",
+    ],
+    "length_column": [
+        "length", "parcel length", "package length", "item length",
+    ],
+    "width_column": [
+        "width", "parcel width", "package width", "item width",
+    ],
+    "height_column": [
+        "height", "parcel height", "package height", "item height",
+    ],
+    "country_code_column": [
+        "country code", "iso country code", "country iso", "iso code", "destination country code",
+    ],
+    "quantity_column": [
+        "quantity", "qty", "item quantity", "number of items",
+    ],
+    "product_description_column": [
+        "product description", "item description", "description", "contents", "product",
+    ],
+    "retail_value_column": [
+        "retail value", "declared value", "item value", "value",
+    ],
+}
+
+PAF_POSTCODE_COL = "PAF Postcode"
+PAF_TOWN_COL = "PAF Town"
+PAF_COUNTY_COL = "PAF County"
 # =========================
 # PRINTING CONSTANTS
 # =========================

@@ -61,7 +61,43 @@ def _seed_block(*, standard_options, bespoke_options, toggle_off_text, toggle_on
         },
     }
 
-def build_create_ecommerce_file_schema(*, column_options, preview_rows=None):
+def _info_switch(*,key_prefix,field_name,column_options,required=False,required_if=None):
+    cfg = {
+        "type": "switch_with_extras",
+        "key": f"{key_prefix}_mode",
+        "default": "a",
+        "field_name": field_name,
+        "always_required": bool(required),
+        "state_name_a": f"Select {field_name}",
+        "state_name_b": f"Enter {field_name}",
+        "control_a": {
+            "type": "compact_select",
+            "key": f"{key_prefix}_column",
+            "label": "",
+            "options": column_options,
+            "default": "__select__",
+            "mutex_group": "ecommerce_columns",
+            "parent_mode_key": f"{key_prefix}_mode",
+            "active_mode_value": "a"},
+        "control_b": {
+            "type": "text",
+            "key": f"{key_prefix}_text",
+            "label": "",
+            "default": ""}}
+
+    if required or required_if:
+        cfg["required_mode_map"] = {
+            "a": [f"{key_prefix}_column"],
+            "b": [f"{key_prefix}_text"]}
+
+    if required_if:
+        cfg["required_if"] = required_if
+
+    return cfg
+
+def build_create_ecommerce_file_schema(*, column_options, preview_rows=None, return_address_options=None):
+    return_address_options = return_address_options or [("— Select —", "__select__")]
+
     return [
         {
             "type": "table_preview",
@@ -74,27 +110,19 @@ def build_create_ecommerce_file_schema(*, column_options, preview_rows=None):
             "label": "Address Fields (Fields marked with * are mandatory)",
             "children": [
                 {
-                    "type": "range_select",
-                    "key": "address_fields",
-                    "start_key": "address_start",
-                    "end_key": "address_end",
-                    "start_label": "Address Start*",
-                    "end_label": "Address End*",
-                    "options": column_options,
-                    "default_start": "__select__",
-                    "default_end": "__select__",
-                    "required_keys": ["address_start", "address_end"],
-                },
-                {
                     "type": "compact_select_row",
                     "children": [
                         {
-                            "type": "compact_select",
-                            "key": "postcode_column",
-                            "label": "Postcode*",
+                            "type": "range_select",
+                            "key": "address_fields",
+                            "start_key": "address_start",
+                            "end_key": "address_end",
+                            "start_label": "Address Start*",
+                            "end_label": "Address End*",
                             "options": column_options,
-                            "default": "__select__",
-                            "required": True,
+                            "default_start": "__select__",
+                            "default_end": "__select__",
+                            "required_keys": ["address_start", "address_end"],
                         },
                         {
                             "type": "compact_select",
@@ -103,12 +131,31 @@ def build_create_ecommerce_file_schema(*, column_options, preview_rows=None):
                             "options": column_options,
                             "default": "__select__",
                             "required": True,
+                            "mutex_group": "ecommerce_columns",
                         },
                         {
                             "type": "compact_select",
                             "key": "county_column",
                             "label": "County",
                             "options": column_options,
+                            "default": "__select__",
+                            "required": False,
+                            "mutex_group": "ecommerce_columns",
+                        },
+                        {
+                            "type": "compact_select",
+                            "key": "postcode_column",
+                            "label": "Postcode*",
+                            "options": column_options,
+                            "default": "__select__",
+                            "required": True,
+                            "mutex_group": "ecommerce_columns",
+                        },
+                        {
+                            "type": "compact_select",
+                            "key": "return_address",
+                            "label": "Return Address",
+                            "options": return_address_options,
                             "default": "__select__",
                             "required": False,
                         },
@@ -118,27 +165,150 @@ def build_create_ecommerce_file_schema(*, column_options, preview_rows=None):
         },
         {
             "type": "section",
-            "label": "Information",
+            "label": "Recipient Details",
             "children": [
                 {
-                    "type": "switch_with_extras",
-                    "key": "reference_mode",
-                    "default": "a",
-                    "state_name_a": "Select Reference Column",
-                    "state_name_b": "Enter Reference",
-                    "control_a": {
-                        "type": "compact_select",
-                        "key": "reference_column",
-                        "label": "",
-                        "options": column_options,
-                        "default": "__select__",
-                    },
-                    "control_b": {
-                        "type": "text",
-                        "key": "reference_text",
-                        "label": "",
-                        "default": "",
-                    },
+                    "type": "compact_select_row",
+                    "children": [
+                        _info_switch(
+                            key_prefix="name",
+                            field_name="Name",
+                            column_options=column_options,
+                            required=True,
+                        ),
+                        _info_switch(
+                            key_prefix="surname",
+                            field_name="Surname",
+                            column_options=column_options,
+                            required=False,
+                        ),
+                        _info_switch(
+                            key_prefix="company",
+                            field_name="Company",
+                            column_options=column_options,
+                            required=False,
+                        ),
+                    ],
+                },
+            ],
+        },
+        {
+            "type": "section",
+            "label": "Service Options",
+            "children": [
+                {
+                    "type": "compact_select_row",
+                    "children": [
+                        {
+                            "type": "checkbox",
+                            "key": "multiply_weight_by_quantity",
+                            "label": "Multiply Weight x Quantity",
+                            "default": False,
+                        },
+                        {
+                            "type": "checkbox",
+                            "key": "change_service_code",
+                            "label": "Use Old Service Code",
+                            "default": True,
+                        },
+                        {
+                            "type": "checkbox",
+                            "key": "use_max_service_dimensions",
+                            "label": "Use Max Service Dimensions",
+                            "default": False,
+                        },
+                    ],
+                },
+            ],
+        },
+        {
+            "type": "section",
+            "label": "Service Details",
+            "children": [
+                {
+                    "type": "compact_select_row",
+                    "children": [
+                        _info_switch(
+                            key_prefix="reference",
+                            field_name="Reference",
+                            column_options=column_options,
+                            required=True,
+                        ),
+                        _info_switch(
+                            key_prefix="service",
+                            field_name="Service",
+                            column_options=column_options,
+                            required=True,
+                        ),
+                        _info_switch(
+                            key_prefix="weight",
+                            field_name="Weight",
+                            column_options=column_options,
+                            required=True,
+                        ),
+                    ],
+                },
+                {
+                    "type": "compact_select_row",
+                    "children": [
+                        _info_switch(
+                            key_prefix="length",
+                            field_name="Length",
+                            column_options=column_options,
+                            required=True,
+                        ),
+                        _info_switch(
+                            key_prefix="width",
+                            field_name="Width",
+                            column_options=column_options,
+                            required=True,
+                        ),
+                        _info_switch(
+                            key_prefix="height",
+                            field_name="Height",
+                            column_options=column_options,
+                            required=True,
+                        ),
+                    ],
+                },
+                {
+                    "type": "compact_select_row",
+                    "children": [
+                        _info_switch(
+                            key_prefix="country_code",
+                            field_name="Country Code",
+                            column_options=column_options,
+                            required=False,
+                        ),
+                        _info_switch(
+                            key_prefix="quantity",
+                            field_name="Quantity",
+                            column_options=column_options,
+                            required=False,
+                            required_if={
+                                "key": "multiply_weight_by_quantity",
+                                "op": "==",
+                                "value": True,
+                            },
+                        ),
+                        _info_switch(
+                            key_prefix="product_description",
+                            field_name="Product Description",
+                            column_options=column_options,
+                            required=False,
+                        ),
+                    ],
+                },
+                {
+                    "type": "compact_select_row",
+                    "children": [
+                        _info_switch(
+                            key_prefix="retail_value",
+                            field_name="Retail Value",
+                            column_options=column_options,
+                            required=False,
+                        ),
+                    ],
                 },
             ],
         },
