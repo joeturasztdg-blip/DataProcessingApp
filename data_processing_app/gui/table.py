@@ -3,7 +3,7 @@ from PySide6.QtWidgets import QAbstractItemView, QTableView
 from PySide6.QtCore import Qt, QRect, QPoint, QTimer
 from PySide6.QtGui import QDrag, QPainter, QColor, QCursor
 
-from config.constants import (TABLE_EDGE_GRAB_PX, TABLE_SCROLL_MARGIN_PX, TABLE_SCROLL_INTERVAL_MS)
+from config.constants import (TABLE_SCROLL_MARGIN_PX, TABLE_SCROLL_INTERVAL_MS)
 
 
 class DragDropTableView(QTableView):

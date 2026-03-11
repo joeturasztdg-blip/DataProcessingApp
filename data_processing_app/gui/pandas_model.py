@@ -8,7 +8,6 @@ from PySide6.QtCore import Qt, QAbstractTableModel, QMimeData, QModelIndex, QByt
 
 _DUP_RE = re.compile(r"^(.*?)(?: \((\d+)\))?$")
 
-
 class DragDropPandasModel(QAbstractTableModel):
     MIME_TYPE = "application/x-pandas-cell-block"
 

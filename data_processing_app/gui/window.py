@@ -61,7 +61,7 @@ class MainWindow(QWidget):
         self.print_pdf = PrintPdf(self)
         # ---- Actions (buttons + wiring) ----
         actions = [
-            ("btn_query_databases", "Logins and Seeds", self.query_databases.run),
+            ("btn_query_databases", "Databases", self.query_databases.run),
             ("btn_format_csv", "Edit CSV Format", self.format_csv.run),
             ("btn_create_file", "Create Mailing File", self.create_file.run),
             ("btn_split_file", "Split Mailing File", self.split_file.run),
