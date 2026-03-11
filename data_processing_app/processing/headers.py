@@ -104,12 +104,22 @@ class HeaderDetector:
 
     def _contains_keywords(self, row):
         keywords = {
-            "name","address","postcode","post code","zip","email",
-            "city","town","county","country",
-            "a1","a2","a3","a4","a5","a6",
-            "seed","pid","contact_id","marketing_campaign","brand_cd","dps"
+            "name", "address", "postcode", "post code", "zip", "email",
+            "city", "town", "county", "country",
+            "a1", "a2", "a3", "a4", "a5", "a6",
+            "seed", "pid", "contact_id", "marketing_campaign", "brand_cd", "dps",
+            "mailing address", "formatted name", "organisation",
+            "mailing town", "mailing county", "mailing postcode",
         }
-        return bool({c.lower() for c in row if c.strip()} & keywords)
+
+        cells = [str(c).strip().lower() for c in row if str(c).strip()]
+        for cell in cells:
+            if cell in keywords:
+                return True
+            if any(keyword in cell for keyword in keywords):
+                return True
+
+        return False
 
     def _similarity_rule(self, r1, r2, r3):
         def sig(row):
