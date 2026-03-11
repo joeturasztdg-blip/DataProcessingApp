@@ -56,7 +56,7 @@ class UpdateOutFile(BaseWorkflow):
                     delimiter=delimiter,
                     has_header=has_header,
                     success_msg="OUT file updated successfully.",
-                    sanitize=True)
+                    sanitize=False)
 
             except Exception as e:
                 self.fail_exception("Update OUT file failed", e)

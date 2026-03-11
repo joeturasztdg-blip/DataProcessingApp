@@ -7,7 +7,7 @@ import tempfile
 from PySide6.QtWidgets import QDialog
 
 from workspace.base import BaseWorkflow
-from gui.zip_dialog import ZipDialog
+from gui.dialogs.zip_dialog import ZipDialog
 
 class CreateZip(BaseWorkflow):
     def run(self, checked: bool = False):

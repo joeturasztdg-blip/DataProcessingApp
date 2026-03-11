@@ -7,8 +7,8 @@ from PySide6.QtWidgets import QDialog, QMessageBox
 
 from config.constants import SYSTEM_PRINTERS
 from config.schemas import PRINT_PDF_SCHEMA
-from gui.options_dialog import OptionsDialog
-from gui.printing_dialog import BatchPdfPrintDialog
+from gui.dialogs.options_dialog import OptionsDialog
+from gui.dialogs.printing_dialog import BatchPdfPrintDialog
 from processing.pdf_labels import append_label
 from utils.print_utils import print_to_specific_printer
 

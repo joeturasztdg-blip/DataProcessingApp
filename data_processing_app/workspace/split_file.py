@@ -222,7 +222,7 @@ class SplitFile(BaseWorkflow):
 
                     p1 = self.mw.ask_save_csv(
                         "Save File 1",
-                        "CSV Files (*.csv);All Files (*)",
+                        "CSV Files (*.csv);;All Files (*)",
                         defaultName=f"{base} File 1.csv",
                     )
                     if not p1:
@@ -230,7 +230,7 @@ class SplitFile(BaseWorkflow):
 
                     p2 = self.mw.ask_save_csv(
                         "Save File 2",
-                        "CSV Files (*.csv);All Files (*)",
+                        "CSV Files (*.csv);;All Files (*)",
                         defaultName=f"{base} File 2.csv",
                     )
                     if not p2:
@@ -327,7 +327,7 @@ class SplitFile(BaseWorkflow):
                 for i in range(1, split_count + 1):
                     p = self.mw.ask_save_csv(
                         f"Save File {i}",
-                        "CSV Files (*.csv);All Files (*)",
+                        "CSV Files (*.csv);;All Files (*)",
                         defaultName=f"{base} File {i}.csv",
                     )
                     if not p:

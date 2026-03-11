@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, Optional
 
 from PySide6.QtWidgets import QDialog, QMessageBox
+
+from gui.dialogs.options_dialog import OptionsDialog
+from gui.dialogs.preview_dialog import PreviewDialog
 
 DoneHandler = Callable[[Any], None]
 ErrHandler = Callable[[str], None]
@@ -36,14 +39,12 @@ class BaseWorkflow:
         return self.mw._run_busy(title,message,fn,on_done=on_done,on_err=on_err or (lambda e: self.fail(title, e)),cancelable=cancelable)
     # ---------------- helpers ----------------
     def options_dialog(self, schema, *, title: str) -> Optional[dict]:
-        from gui.options_dialog import OptionsDialog
         dlg = OptionsDialog(schema, parent=self.mw, title=title)
         if dlg.exec() != QDialog.Accepted:
             return None
         return dlg.get_results()
 
     def preview_dialog(self, df, *, title: str = "Preview"):
-        from gui.preview_dialog import PreviewDialog
         dlg = PreviewDialog(df, self.mw, title=title)
         if dlg.exec() != QDialog.Accepted:
             return None
