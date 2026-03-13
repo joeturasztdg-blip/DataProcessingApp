@@ -399,6 +399,7 @@ class _ServicesBrowserTab(_BaseBrowserTab):
                 "Name",
                 "New Code",
                 "Old Code",
+                "Replacement Code",
                 "Max Weight (g)",
                 "Min Length (mm)",
                 "Min Width (mm)",
@@ -427,6 +428,7 @@ class _ServicesBrowserTab(_BaseBrowserTab):
             row.get("name", ""),
             row.get("new_code", ""),
             row.get("old_code", ""),
+            row.get("replacement_code", ""),
             row.get("max_weight_g", ""),
             row.get("min_length_mm", ""),
             row.get("min_width_mm", ""),
@@ -444,13 +446,13 @@ class _ServicesBrowserTab(_BaseBrowserTab):
 
     def _extract_payload(self, r: int):
         try:
-            max_weight_g = int(_get_cell_text(self.table, r, 4))
-            min_length_mm = int(_get_cell_text(self.table, r, 5))
-            min_width_mm = int(_get_cell_text(self.table, r, 6))
-            min_height_mm = int(_get_cell_text(self.table, r, 7))
-            max_length_mm = self._parse_optional_int(_get_cell_text(self.table, r, 8))
-            max_width_mm = self._parse_optional_int(_get_cell_text(self.table, r, 9))
-            max_height_mm = self._parse_optional_int(_get_cell_text(self.table, r, 10))
+            max_weight_g = int(_get_cell_text(self.table, r, 5))
+            min_length_mm = int(_get_cell_text(self.table, r, 6))
+            min_width_mm = int(_get_cell_text(self.table, r, 7))
+            min_height_mm = int(_get_cell_text(self.table, r, 8))
+            max_length_mm = self._parse_optional_int(_get_cell_text(self.table, r, 9))
+            max_width_mm = self._parse_optional_int(_get_cell_text(self.table, r, 10))
+            max_height_mm = self._parse_optional_int(_get_cell_text(self.table, r, 11))
         except ValueError as e:
             raise ValueError(f"Row {r + 1}: numeric columns must contain valid integers.") from e
 
@@ -459,6 +461,7 @@ class _ServicesBrowserTab(_BaseBrowserTab):
             _get_cell_text(self.table, r, 1),
             _get_cell_text(self.table, r, 2),
             _get_cell_text(self.table, r, 3),
+            _get_cell_text(self.table, r, 4),
             max_weight_g,
             min_length_mm,
             min_width_mm,
@@ -476,6 +479,7 @@ class _ServicesBrowserTab(_BaseBrowserTab):
                 name,
                 new_code,
                 old_code,
+                replacement_code,
                 max_weight_g,
                 min_length_mm,
                 min_width_mm,
@@ -492,6 +496,7 @@ class _ServicesBrowserTab(_BaseBrowserTab):
                         name,
                         new_code,
                         old_code,
+                        replacement_code,
                         max_weight_g,
                         min_length_mm,
                         min_width_mm,
@@ -500,13 +505,14 @@ class _ServicesBrowserTab(_BaseBrowserTab):
                         max_width_mm,
                         max_height_mm
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         id_int,
                         name,
                         new_code,
                         old_code,
+                        replacement_code,
                         max_weight_g,
                         min_length_mm,
                         min_width_mm,
@@ -517,7 +523,6 @@ class _ServicesBrowserTab(_BaseBrowserTab):
                     ),
                 )
             con.commit()
-
 
 class _ReturnAddressesBrowserTab(_BaseBrowserTab):
     def __init__(self, *, repo: ReturnAddressesRepository, parent=None):
