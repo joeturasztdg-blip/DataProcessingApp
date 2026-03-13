@@ -25,6 +25,7 @@ class ServicesRepository:
                     name,
                     new_code,
                     old_code,
+                    replacement_code,
                     max_weight_g,
                     min_length_mm,
                     min_width_mm,
@@ -54,6 +55,7 @@ class ServicesRepository:
                     name,
                     new_code,
                     old_code,
+                    replacement_code,
                     max_weight_g,
                     min_length_mm,
                     min_width_mm,
@@ -66,10 +68,11 @@ class ServicesRepository:
                     name LIKE ?
                     OR new_code LIKE ?
                     OR old_code LIKE ?
+                    OR replacement_code LIKE ?
                 ORDER BY id ASC
                 LIMIT ?
                 """,
-                (pat, pat, pat, int(limit)),
+                (pat, pat, pat, pat, int(limit)),
             ).fetchall()
         return [dict(r) for r in rows]
 
@@ -87,6 +90,7 @@ class ServicesRepository:
         name: str,
         new_code: str,
         old_code: str,
+        replacement_code: str,
         max_weight_g: int,
         min_length_mm: int,
         min_width_mm: int,
@@ -104,6 +108,7 @@ class ServicesRepository:
                     name,
                     new_code,
                     old_code,
+                    replacement_code,
                     max_weight_g,
                     min_length_mm,
                     min_width_mm,
@@ -112,13 +117,14 @@ class ServicesRepository:
                     max_width_mm,
                     max_height_mm
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     int(id_),
                     str(name),
                     str(new_code),
                     str(old_code),
+                    str(replacement_code),
                     int(max_weight_g),
                     int(min_length_mm),
                     int(min_width_mm),
@@ -132,14 +138,14 @@ class ServicesRepository:
 
     # ---------------- Ecommerce lookup methods ----------------
 
-    def get_old_codes_by_new_codes(
+    def get_replacement_codes_by_new_codes(
         self,
-        values: Iterable[str],
+        values,
         *,
         chunk_size: int = 900,
-    ) -> Dict[str, str]:
-        vals: list[str] = []
-        seen: set[str] = set()
+    ):
+        vals = []
+        seen = set()
 
         for v in values:
             key = str(v or "").strip().upper()
@@ -150,24 +156,27 @@ class ServicesRepository:
         if not vals:
             return {}
 
-        found: Dict[str, str] = {}
+        found = {}
 
         with self._connect() as con:
             cur = con.cursor()
-            for i in range(0, len(vals), int(chunk_size)):
-                chunk = vals[i : i + int(chunk_size)]
+
+            for i in range(0, len(vals), chunk_size):
+                chunk = vals[i:i + chunk_size]
                 placeholders = ",".join(["?"] * len(chunk))
+
                 cur.execute(
                     f"""
                     SELECT
                         UPPER(TRIM(new_code)) AS new_code_key,
-                        old_code
+                        replacement_code
                     FROM {self.table_name}
                     WHERE UPPER(TRIM(new_code)) IN ({placeholders})
                     """,
                     chunk,
                 )
+
                 for row in cur.fetchall():
-                    found[str(row["new_code_key"])] = str(row["old_code"] or "").strip()
+                    found[row["new_code_key"]] = (row["replacement_code"] or "").strip()
 
         return found

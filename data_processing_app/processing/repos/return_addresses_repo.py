@@ -73,17 +73,7 @@ class ReturnAddressesRepository:
             ).fetchone()
         return int(row["nxt"]) if row and row["nxt"] is not None else 1
 
-    def insert_row(
-        self,
-        *,
-        id_: int,
-        contact_name: str,
-        address1: str,
-        address2: str = "",
-        address3: str = "",
-        town: str,
-        postcode: str,
-    ) -> None:
+    def insert_row(self,*,id_: int,contact_name: str,address1: str,address2: str = "",address3: str = "",town: str,postcode: str,) -> None:
         with self._connect() as con:
             con.execute(
                 f"""
@@ -110,3 +100,19 @@ class ReturnAddressesRepository:
                 ),
             )
             con.commit()
+    
+    def list_options(repo: ReturnAddressesRepository) -> list[tuple[str, str]]:
+        rows = repo.list_all(limit=100000)
+
+        names: list[str] = []
+        seen: set[str] = set()
+
+        for row in rows:
+            name = str(row.get("contact_name", "") or "").strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            names.append(name)
+
+        names.sort(key=lambda x: x.lower())
+        return [("— Select —", "__select__")] + [(name, name) for name in names]
