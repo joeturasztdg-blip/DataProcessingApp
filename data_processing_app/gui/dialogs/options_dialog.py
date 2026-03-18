@@ -5,7 +5,7 @@ from gui.dialogs.options.paging import PagerManager
 from gui.dialogs.options.rules import DialogRules
 from gui.dialogs.options.mutex import DialogMutexController
 from gui.dialogs.options.building import DialogBuilder
-from gui.dialogs.options.service_dimensions import ServiceDimensionsController
+from gui.dialogs.options.state_rules import StateRules
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeyEvent
@@ -50,7 +50,7 @@ class OptionsDialog(QDialog):
             widget_for=self.ctx.widget_for,
         )
         
-        self.service_dimensions = ServiceDimensionsController(
+        self.state_rules = StateRules(
                 self.ctx,
                 self.rules,
                 self.mutex,
@@ -163,7 +163,7 @@ class OptionsDialog(QDialog):
         try:
             self._refresh_dynamic_multis()
             self.rules.refresh_visibility()
-            self.service_dimensions.apply_state()
+            self.state_rules.apply_state()
             self.mutex.refresh_selects()
 
             for group in self.ctx.mutex_groups:
