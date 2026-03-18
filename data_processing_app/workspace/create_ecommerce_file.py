@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import pandas as pd
@@ -18,6 +19,7 @@ from config.schemas import build_create_ecommerce_file_schema
 
 from gui.dialogs.options_dialog import OptionsDialog
 from gui.dialogs.paf_resolution_dialog import PAFResolutionDialog
+from gui.dialogs.recipient_name_resolution_dialog import RecipientNameResolutionDialog
 from gui.dialogs.service_resolution_dialog import ServiceResolutionDialog
 
 
@@ -101,12 +103,15 @@ class CreateEcommerceFile(BaseWorkflow):
             multiply_weight_by_quantity = bool(opts.get("multiply_weight_by_quantity", False))
             change_service_code = bool(opts.get("change_service_code", True))
             use_max_service_dimensions = bool(opts.get("use_max_service_dimensions", False))
+            use_windsor_agreement_defaults = bool(opts.get("use_windsor_agreement_defaults", False))
+            export_in_batches_of_300 = bool(opts.get("export_in_batches_of_300", False))
             selected_return_address = opts.get("return_address")
 
             if not self._validate_selected_fields(
                 df,
                 fields=fields,
                 use_max_service_dimensions=use_max_service_dimensions,
+                use_windsor_agreement_defaults=use_windsor_agreement_defaults,
             ):
                 return
 
@@ -145,40 +150,39 @@ class CreateEcommerceFile(BaseWorkflow):
                 preview_columns=preview_columns,
             )
 
-            resolution_state = self.paf_resolution.collect_resolution_state(
+            paf_loop_result = self._run_paf_resolution_loop(
                 prepared_df,
                 postcode_col=postcode_col,
                 town_col=town_col,
                 preview_specs=preview_specs,
-                postcodes_repo=self.mw.s.postcodes_repo,
             )
-
-            resolution_result = self._run_paf_resolution_dialog_if_needed(
-                resolution_state=resolution_state,
-                postcode_col=postcode_col,
-                town_col=town_col,
-            )
-            if resolution_result is None:
+            if paf_loop_result is None:
                 return
+
+            resolved_df, paf_reject_df = paf_loop_result
 
             def job_build():
                 return self._build_pre_service_frames(
-                    prepared_df=prepared_df,
-                    postcode_col=postcode_col,
+                    prepared_df=resolved_df,
                     fields=fields,
                     multiply_weight_by_quantity=multiply_weight_by_quantity,
                     change_service_code=change_service_code,
                     use_max_service_dimensions=use_max_service_dimensions,
+                    use_windsor_agreement_defaults=use_windsor_agreement_defaults,
                     selected_return_address=selected_return_address,
-                    resolution_state=resolution_state,
-                    resolution_result=resolution_result,
+                    paf_reject_df=paf_reject_df,
                 )
 
             def on_done(build_result):
                 if build_result is None:
                     return
 
-                working_df, paf_reject_df = build_result
+                working_df, paf_reject_df_local = build_result
+
+                working_df, recipient_reject_df = self._run_recipient_name_resolution_loop(
+                    working_df,
+                    preview_specs=preview_specs,
+                )
 
                 working_df = self._run_service_resolution_loop(
                     working_df,
@@ -201,14 +205,23 @@ class CreateEcommerceFile(BaseWorkflow):
                 )
                 valid_df = self.mapping.order_ecommerce_output_columns(valid_df)
 
-                paf_reject_df = self._rename_reject_frame_to_paf(
-                    paf_reject_df,
+                paf_reject_df_local = self._rename_reject_frame_to_paf(
+                    paf_reject_df_local,
                     preview_columns=preview_columns,
                     town_col=town_col,
                     county_col=county_col,
                     postcode_col=postcode_col,
                 )
-                paf_reject_df = self.mapping.order_ecommerce_output_columns(paf_reject_df)
+                paf_reject_df_local = self.mapping.order_ecommerce_output_columns(paf_reject_df_local)
+
+                recipient_reject_df = self._rename_reject_frame_to_paf(
+                    recipient_reject_df,
+                    preview_columns=preview_columns,
+                    town_col=town_col,
+                    county_col=county_col,
+                    postcode_col=postcode_col,
+                )
+                recipient_reject_df = self.mapping.order_ecommerce_output_columns(recipient_reject_df)
 
                 service_reject_df = self._rename_reject_frame_to_paf(
                     service_reject_df,
@@ -219,7 +232,9 @@ class CreateEcommerceFile(BaseWorkflow):
                 )
                 service_reject_df = self.mapping.order_ecommerce_output_columns(service_reject_df)
 
-                reject_df = self.transforms.concat_frames([paf_reject_df, service_reject_df])
+                reject_df = self.transforms.concat_frames(
+                    [paf_reject_df_local, recipient_reject_df, service_reject_df]
+                )
                 if reject_df is not None and not reject_df.empty:
                     reject_df = self.mapping.order_ecommerce_output_columns(reject_df)
 
@@ -238,15 +253,25 @@ class CreateEcommerceFile(BaseWorkflow):
                 if not outfile:
                     return
 
-                self.save_csv_then(
-                    edited,
-                    outfile,
-                    title="Create E-Commerce File",
-                    delimiter=out_delim,
-                    has_header=has_header,
-                    success_msg="E-Commerce file created successfully.",
-                    sanitize=True,
-                )
+                if export_in_batches_of_300:
+                    self._save_output_in_batches(
+                        edited,
+                        outfile=outfile,
+                        title="Create E-Commerce File",
+                        delimiter=out_delim,
+                        has_header=has_header,
+                        batch_size=300,
+                    )
+                else:
+                    self.save_csv_then(
+                        edited,
+                        outfile,
+                        title="Create E-Commerce File",
+                        delimiter=out_delim,
+                        has_header=has_header,
+                        success_msg="E-Commerce file created successfully.",
+                        sanitize=True,
+                    )
 
                 if reject_df is not None and not reject_df.empty:
                     reject_path = outfile.replace(".csv", "_Rejects.csv")
@@ -347,6 +372,7 @@ class CreateEcommerceFile(BaseWorkflow):
         *,
         fields: dict[str, dict[str, Any]],
         use_max_service_dimensions: bool = False,
+        use_windsor_agreement_defaults: bool = False,
     ) -> bool:
         for spec in self.RECIPIENT_FIELD_SPECS:
             field = fields[spec["prefix"]]
@@ -361,10 +387,15 @@ class CreateEcommerceFile(BaseWorkflow):
                 ):
                     return False
 
+        windsor_locked_outputs = {"Country Code", "Retail Value", "Product Description", "Quantity"}
+
         for spec in self.INFO_FIELD_SPECS:
             field = fields[spec["prefix"]]
 
             if use_max_service_dimensions and field.get("output") in {"Length", "Width", "Height"}:
+                continue
+
+            if use_windsor_agreement_defaults and field.get("output") in windsor_locked_outputs:
                 continue
 
             if field["required"]:
@@ -417,6 +448,49 @@ class CreateEcommerceFile(BaseWorkflow):
             "row_updates": result.get("row_updates", {}),
         }
 
+    def _run_paf_resolution_loop(
+        self,
+        df: pd.DataFrame,
+        *,
+        postcode_col: str,
+        town_col: str,
+        preview_specs: list[dict[str, str]],
+    ) -> tuple[pd.DataFrame, pd.DataFrame] | None:
+        working_df = df.copy()
+        all_paf_rejects: list[pd.DataFrame] = []
+
+        while True:
+            resolution_state = self.paf_resolution.collect_resolution_state(
+                working_df,
+                postcode_col=postcode_col,
+                town_col=town_col,
+                preview_specs=preview_specs,
+                postcodes_repo=self.mw.s.postcodes_repo,
+            )
+
+            if not resolution_state["resolution_postcodes"]:
+                reject_df = self.transforms.concat_frames(all_paf_rejects)
+                return working_df, reject_df
+
+            resolution_result = self._run_paf_resolution_dialog_if_needed(
+                resolution_state=resolution_state,
+                postcode_col=postcode_col,
+                town_col=town_col,
+            )
+            if resolution_result is None:
+                return None
+
+            working_df, paf_reject_df = self.paf_resolution.apply_resolution_result(
+                working_df,
+                postcode_col=postcode_col,
+                resolution_state=resolution_state,
+                resolution_result=resolution_result,
+                postcodes_repo=self.mw.s.postcodes_repo,
+            )
+
+            if paf_reject_df is not None and not paf_reject_df.empty:
+                all_paf_rejects.append(paf_reject_df)
+
     def _apply_all_info_fields(
         self,
         frame: pd.DataFrame,
@@ -424,6 +498,7 @@ class CreateEcommerceFile(BaseWorkflow):
         fields: dict[str, dict[str, Any]],
         multiply_weight_by_quantity: bool,
         change_service_code: bool,
+        use_windsor_agreement_defaults: bool = False,
     ) -> pd.DataFrame:
         out = frame.copy()
 
@@ -447,8 +522,11 @@ class CreateEcommerceFile(BaseWorkflow):
                 output_column=spec["output"],
             )
 
+        if use_windsor_agreement_defaults:
+            out = self.service_rules.apply_default_windsor_details(out)
+
         if change_service_code:
-            out = self.service_rules.use_old_service_code(
+            out = self.service_rules.use_replacement_service_code(
                 out,
                 services_repo=self.services_repo,
                 service_column="Service",
@@ -463,28 +541,22 @@ class CreateEcommerceFile(BaseWorkflow):
         self,
         *,
         prepared_df: pd.DataFrame,
-        postcode_col: str,
         fields: dict[str, dict[str, Any]],
         multiply_weight_by_quantity: bool,
         change_service_code: bool,
         use_max_service_dimensions: bool,
+        use_windsor_agreement_defaults: bool,
         selected_return_address: str | None,
-        resolution_state: dict[str, Any],
-        resolution_result: dict[str, Any],
-    ) -> tuple[pd.DataFrame, pd.DataFrame]:
-        working_df, paf_reject_df = self.paf_resolution.apply_resolution_result(
-            prepared_df,
-            postcode_col=postcode_col,
-            resolution_state=resolution_state,
-            resolution_result=resolution_result,
-            postcodes_repo=self.mw.s.postcodes_repo,
-        )
+        paf_reject_df: pd.DataFrame | None,
+    ) -> tuple[pd.DataFrame, pd.DataFrame | None]:
+        working_df = prepared_df.copy()
 
         working_df = self._apply_all_info_fields(
             working_df,
             fields=fields,
             multiply_weight_by_quantity=multiply_weight_by_quantity,
             change_service_code=change_service_code,
+            use_windsor_agreement_defaults=use_windsor_agreement_defaults,
         )
 
         working_df = self.transforms.apply_return_address(
@@ -500,12 +572,13 @@ class CreateEcommerceFile(BaseWorkflow):
                 service_column="Service",
             )
 
-        if not paf_reject_df.empty:
+        if paf_reject_df is not None and not paf_reject_df.empty:
             paf_reject_df = self._apply_all_info_fields(
                 paf_reject_df,
                 fields=fields,
                 multiply_weight_by_quantity=multiply_weight_by_quantity,
                 change_service_code=change_service_code,
+                use_windsor_agreement_defaults=use_windsor_agreement_defaults,
             )
 
             paf_reject_df = self.transforms.apply_return_address(
@@ -615,3 +688,235 @@ class CreateEcommerceFile(BaseWorkflow):
             county_col=county_col,
             postcode_col=postcode_col,
         )
+
+    def _collect_recipient_name_resolution_state(
+        self,
+        df: pd.DataFrame,
+        *,
+        preview_specs: list[dict[str, str]],
+    ) -> dict[str, Any]:
+        if "Recipient Name" not in df.columns:
+            return {
+                "resolution_indices": [],
+                "rows": [],
+            }
+
+        paf_address1_source = next(
+            (
+                str(spec.get("source"))
+                for spec in preview_specs
+                if str(spec.get("paf", "")).strip() == "PAF Address 1"
+            ),
+            None,
+        )
+        paf_town_source = next(
+            (
+                str(spec.get("source"))
+                for spec in preview_specs
+                if str(spec.get("paf", "")).strip() == "PAF Town"
+            ),
+            None,
+        )
+
+        resolution_indices: list[int] = []
+        rows: list[dict[str, str]] = []
+
+        for idx, row in df.iterrows():
+            recipient = "" if pd.isna(row.get("Recipient Name")) else str(row.get("Recipient Name")).strip()
+            if recipient:
+                continue
+
+            company = "" if pd.isna(row.get("Company")) else str(row.get("Company")).strip()
+
+            paf_address1 = ""
+            if paf_address1_source and paf_address1_source in df.columns:
+                value = row.get(paf_address1_source)
+                paf_address1 = "" if pd.isna(value) else str(value).strip()
+
+            paf_town = ""
+            if paf_town_source and paf_town_source in df.columns:
+                value = row.get(paf_town_source)
+                paf_town = "" if pd.isna(value) else str(value).strip()
+
+            resolution_indices.append(int(idx))
+            rows.append(
+                {
+                    "Recipient Name": recipient,
+                    "Company": company,
+                    "PAF Address 1": paf_address1,
+                    "PAF Town": paf_town,
+                    "Reject Reason": "Recipient name missing",
+                }
+            )
+
+        return {
+            "resolution_indices": resolution_indices,
+            "rows": rows,
+        }
+
+    def _run_recipient_name_resolution_dialog_if_needed(
+        self,
+        *,
+        resolution_state: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        if not resolution_state["rows"]:
+            return {
+                "rows": [],
+                "original_rows": [],
+                "removed": set(),
+            }
+
+        dlg = RecipientNameResolutionDialog(
+            resolution_state["rows"],
+            parent=self.mw,
+        )
+        if not dlg.exec():
+            return None
+
+        return {
+            "rows": dlg.result_rows(),
+            "original_rows": [dict(r or {}) for r in resolution_state["rows"]],
+            "removed": dlg.removed_indices(),
+        }
+
+    def _apply_recipient_name_resolution_result(
+        self,
+        df: pd.DataFrame,
+        *,
+        resolution_indices: list[int],
+        result: dict[str, Any],
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        out = df.copy()
+        reject_rows: list[pd.Series] = []
+
+        edited_rows = list(result.get("rows", []) or [])
+        original_rows = list(result.get("original_rows", []) or [])
+        removed = set(result.get("removed") or set())
+
+        kept_positions = [pos for pos in range(len(resolution_indices)) if pos not in removed]
+
+        for pos in sorted(removed, reverse=True):
+            if pos < 0 or pos >= len(resolution_indices):
+                continue
+            idx = resolution_indices[pos]
+            if idx in out.index:
+                reject_rows.append(out.loc[idx].copy())
+                out.drop(index=idx, inplace=True)
+
+        for new_pos, original_pos in enumerate(kept_positions):
+            if new_pos >= len(edited_rows):
+                continue
+
+            idx = resolution_indices[original_pos]
+            if idx not in out.index or "Recipient Name" not in out.columns:
+                continue
+
+            edited = edited_rows[new_pos]
+            original = original_rows[original_pos] if original_pos < len(original_rows) else {}
+
+            original_value = "" if pd.isna(original.get("Recipient Name")) else str(original.get("Recipient Name")).strip()
+            edited_value = "" if pd.isna(edited.get("Recipient Name")) else str(edited.get("Recipient Name")).strip()
+
+            if edited_value != original_value:
+                out.loc[idx, "Recipient Name"] = edited_value
+
+        out.reset_index(drop=True, inplace=True)
+
+        reject_df = pd.DataFrame(reject_rows)
+        if not reject_df.empty:
+            reject_df.reset_index(drop=True, inplace=True)
+
+        return out, reject_df
+
+    def _run_recipient_name_resolution_loop(
+        self,
+        df: pd.DataFrame,
+        *,
+        preview_specs: list[dict[str, str]],
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        working_df = df.copy()
+        all_recipient_rejects: list[pd.DataFrame] = []
+
+        while True:
+            resolution_state = self._collect_recipient_name_resolution_state(
+                working_df,
+                preview_specs=preview_specs,
+            )
+
+            if not resolution_state["rows"]:
+                reject_df = self.transforms.concat_frames(all_recipient_rejects)
+                return working_df, reject_df
+
+            result = self._run_recipient_name_resolution_dialog_if_needed(
+                resolution_state=resolution_state,
+            )
+            if result is None:
+                return working_df, self.transforms.concat_frames(all_recipient_rejects)
+
+            working_df, reject_df = self._apply_recipient_name_resolution_result(
+                working_df,
+                resolution_indices=resolution_state["resolution_indices"],
+                result=result,
+            )
+
+            if reject_df is not None and not reject_df.empty:
+                all_recipient_rejects.append(reject_df)
+
+    def _build_batched_output_paths(
+        self,
+        outfile: str,
+        *,
+        total_rows: int,
+        batch_size: int = 300,
+    ) -> list[str]:
+        base, ext = os.path.splitext(outfile)
+        if not ext:
+            ext = ".csv"
+
+        if total_rows <= 0:
+            return [outfile]
+
+        num_batches = (total_rows + batch_size - 1) // batch_size
+        return [f"{base} File {i}{ext}" for i in range(1, num_batches + 1)]
+
+    def _save_output_in_batches(
+        self,
+        df: pd.DataFrame,
+        *,
+        outfile: str,
+        title: str,
+        delimiter: str,
+        has_header: bool,
+        batch_size: int = 300,
+    ) -> None:
+        if df is None or df.empty:
+            self.save_csv_then(
+                df,
+                outfile,
+                title=title,
+                delimiter=delimiter,
+                has_header=has_header,
+                success_msg="E-Commerce file created successfully.",
+                sanitize=True,
+            )
+            return
+
+        paths = self._build_batched_output_paths(
+            outfile,
+            total_rows=len(df),
+            batch_size=batch_size,
+        )
+
+        start = 0
+        for i, path in enumerate(paths, start=1):
+            chunk = df.iloc[start:start + batch_size].copy()
+            self.save_csv_then(
+                chunk,
+                path,
+                title=title,
+                delimiter=delimiter,
+                has_header=has_header,
+                success_msg=f"Saved batch file {i}: {path}",
+                sanitize=True,
+            )
+            start += batch_size
