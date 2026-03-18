@@ -101,3 +101,16 @@ SPLIT_MAX_UNIQUE = 20
 CSV_SNIFF_BYTES = 8192
 # Busy job defaults
 BUSY_THREAD_SHUTDOWN_MS = 2000
+
+MAX_SERVICE_DIMENSIONS = {
+    "Length": "400",
+    "Width": "300",
+    "Height": "200",
+}
+
+DEFAULT_WINDSOR_DETAILS = {
+    "Country Code": "GB",
+    "Retail Value": 1,
+    "Product Description": "Printed Matter",
+    "Quantity": 1
+}

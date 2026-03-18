@@ -61,7 +61,15 @@ def _seed_block(*, standard_options, bespoke_options, toggle_off_text, toggle_on
         },
     }
 
-def _info_switch(*,key_prefix,field_name,column_options,required=False,required_if=None):
+def _info_switch(
+    *,
+    key_prefix,
+    field_name,
+    column_options,
+    required=False,
+    required_if=None,
+    disabled_if=None,
+):
     cfg = {
         "type": "switch_with_extras",
         "key": f"{key_prefix}_mode",
@@ -78,20 +86,29 @@ def _info_switch(*,key_prefix,field_name,column_options,required=False,required_
             "default": "__select__",
             "mutex_group": "ecommerce_columns",
             "parent_mode_key": f"{key_prefix}_mode",
-            "active_mode_value": "a"},
+            "active_mode_value": "a",
+        },
         "control_b": {
             "type": "text",
             "key": f"{key_prefix}_text",
             "label": "",
-            "default": ""}}
+            "default": "",
+        },
+    }
 
     if required or required_if:
         cfg["required_mode_map"] = {
             "a": [f"{key_prefix}_column"],
-            "b": [f"{key_prefix}_text"]}
+            "b": [f"{key_prefix}_text"],
+        }
 
     if required_if:
         cfg["required_if"] = required_if
+
+    if disabled_if:
+        cfg["disabled_if"] = disabled_if
+        cfg["control_a"]["disabled_if"] = disabled_if
+        cfg["control_b"]["disabled_if"] = disabled_if
 
     return cfg
 
@@ -194,17 +211,11 @@ def build_create_ecommerce_file_schema(*, column_options, preview_rows=None, ret
         },
         {
             "type": "section",
-            "label": "Service Options",
+            "label": "Options",
             "children": [
                 {
                     "type": "compact_select_row",
                     "children": [
-                        {
-                            "type": "checkbox",
-                            "key": "multiply_weight_by_quantity",
-                            "label": "Multiply Weight x Quantity",
-                            "default": False,
-                        },
                         {
                             "type": "checkbox",
                             "key": "change_service_code",
@@ -217,6 +228,24 @@ def build_create_ecommerce_file_schema(*, column_options, preview_rows=None, ret
                             "label": "Use Max Service Dimensions",
                             "default": False,
                         },
+                        {
+                            "type": "checkbox",
+                            "key": "use_windsor_agreement_defaults",
+                            "label": "Use Windsor Agreement Defaults",
+                            "default": False,
+                        },
+                        {
+                            "type": "checkbox",
+                            "key": "multiply_weight_by_quantity",
+                            "label": "Multiply Weight x Quantity",
+                            "default": False,
+                        },
+                        {
+                            "type": "checkbox",
+                            "key": "export_in_batches_of_300",
+                            "label": "Export in batches of 300",
+                            "default": False,
+                        }
                     ],
                 },
             ],
@@ -279,6 +308,10 @@ def build_create_ecommerce_file_schema(*, column_options, preview_rows=None, ret
                             field_name="Country Code",
                             column_options=column_options,
                             required=False,
+                            disabled_if={
+                                "key": "use_windsor_agreement_defaults",
+                                "op": "==",
+                                "value": True,},
                         ),
                         _info_switch(
                             key_prefix="quantity",
@@ -290,12 +323,21 @@ def build_create_ecommerce_file_schema(*, column_options, preview_rows=None, ret
                                 "op": "==",
                                 "value": True,
                             },
+                            disabled_if={
+                                "key": "use_windsor_agreement_defaults",
+                                "op": "==",
+                                "value": True,
+                            },
                         ),
                         _info_switch(
                             key_prefix="product_description",
                             field_name="Product Description",
                             column_options=column_options,
                             required=False,
+                            disabled_if={
+                                "key": "use_windsor_agreement_defaults",
+                                "op": "==",
+                                "value": True},
                         ),
                     ],
                 },
@@ -307,6 +349,10 @@ def build_create_ecommerce_file_schema(*, column_options, preview_rows=None, ret
                             field_name="Retail Value",
                             column_options=column_options,
                             required=False,
+                            disabled_if={
+                                "key": "use_windsor_agreement_defaults",
+                                "op": "==",
+                                "value": True},
                         ),
                     ],
                 },
