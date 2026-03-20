@@ -6,13 +6,8 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QToolButton, QWidget
 
 from gui.dialogs.options.bindings import PagerState
 
-
 class PagerManager:
-    def __init__(
-        self,
-        rule_matches: Callable[[object], bool],
-        widget_for: Callable[[str], QWidget | None],
-    ):
+    def __init__(self, rule_matches: Callable[[object], bool], widget_for: Callable[[str], QWidget | None],):
         self._rule_matches = rule_matches
         self._widget_for = widget_for
         self.states: dict[str, PagerState] = {}
@@ -36,8 +31,7 @@ class PagerManager:
         for group, items in groups.items():
             self.states[group] = PagerState(
                 group=group,
-                items=sorted(items, key=sort_key),
-            )
+                items=sorted(items, key=sort_key))
 
         if self.states and self.active_group is None:
             self.active_group = next(iter(self.states.keys()))

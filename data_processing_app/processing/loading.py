@@ -41,64 +41,91 @@ class FileLoader:
         raise ValueError("Unsupported file type")
 
     def _load_csv(self, filename, header_cleaning_mode="none", cancel_event=None):
-        encodings = ["utf-8-sig", "utf-8", "cp1252"]
+        encodings = [
+            ("utf-8-sig", "strict"),
+            ("utf-8", "strict"),
+            ("cp1252", "strict"),
+            ("latin-1", "strict"),
+        ]
         last_error = None
 
-        for enc in encodings:
+        for enc, err_mode in encodings:
             try:
-                delimiter = self._detect_delimiter(filename, enc, "strict")
+                delimiter = self._detect_delimiter(filename, enc, err_mode)
                 rows = []
-                with open(filename, encoding=enc, errors="strict", newline="") as f:
+                with open(filename, encoding=enc, errors=err_mode, newline="") as f:
                     rdr = csv.reader(f, delimiter=delimiter)
                     for row in rdr:
                         self._check_cancel(cancel_event)
                         rows.append(row)
-                self.logger.log(f"[LOAD] CSV decode: {enc}", "green")
+                self.logger.log(f"[LOAD] CSV decode: {enc} ({err_mode})", "green")
                 return self._process_rows(
                     rows,
                     header_cleaning_mode=header_cleaning_mode,
-                    cancel_event=cancel_event)
+                    cancel_event=cancel_event,
+                )
             except UnicodeDecodeError as e:
                 last_error = e
                 continue
-        raise last_error
+
+        # final permissive fallback
+        enc, err_mode = self._choose_text_encoding(filename)
+        delimiter = self._detect_delimiter(filename, enc, err_mode)
+        rows = []
+        with open(filename, encoding=enc, errors=err_mode, newline="") as f:
+            rdr = csv.reader(f, delimiter=delimiter)
+            for row in rdr:
+                self._check_cancel(cancel_event)
+                rows.append(row)
+
+        self.logger.log(f"[LOAD] CSV decode fallback: {enc} ({err_mode})", "yellow")
+        return self._process_rows(
+            rows,
+            header_cleaning_mode=header_cleaning_mode,
+            cancel_event=cancel_event,
+        )
 
     def _load_excel(self, filename, header_cleaning_mode="none", cancel_event=None):
-        # --- job: cancellation guard + extension detection ---
         self._check_cancel(cancel_event)
         ext = os.path.splitext(filename)[1].lower()
 
-        # --- job: extract rows from a real worksheet grid (xlsx) ---
         def _sheet_rows_from_workbook(wb):
             ws = None
-            # prefer active if visible
             try:
                 if wb.active is not None and getattr(wb.active, "sheet_state", "visible") == "visible":
                     ws = wb.active
             except Exception:
                 ws = None
-            # else first visible
+
             if ws is None:
                 for candidate in wb.worksheets:
                     if getattr(candidate, "sheet_state", "visible") == "visible":
                         ws = candidate
                         break
+
             if ws is None:
                 raise ValueError("No visible worksheets found in workbook.")
+
             rows = []
             for row in ws.iter_rows(values_only=True):
                 self._check_cancel(cancel_event)
                 rows.append(["" if v is None else str(v) for v in row])
             return rows
-        # --- job: normal read (non-encrypted) ---
+
         normal_exc = None
         try:
             self._check_cancel(cancel_event)
 
             if ext == ".xlsx":
                 wb = load_workbook(filename, read_only=True, data_only=True)
-                self._check_cancel(cancel_event)
-                rows = _sheet_rows_from_workbook(wb)
+                try:
+                    self._check_cancel(cancel_event)
+                    rows = _sheet_rows_from_workbook(wb)
+                finally:
+                    try:
+                        wb.close()
+                    except Exception:
+                        pass
 
             elif ext == ".xls":
                 book = xlrd.open_workbook(filename)
@@ -120,13 +147,14 @@ class FileLoader:
             return self._process_rows(
                 df.values.tolist(),
                 header_cleaning_mode=header_cleaning_mode,
-                cancel_event=cancel_event)
+                cancel_event=cancel_event,
+            )
 
         except Exception as e:
             normal_exc = e
             if not self.password_callback:
                 raise
-        # --- job: encrypted read (xlsx only via msoffcrypto) ---
+
         if ext != ".xlsx":
             raise normal_exc
 
@@ -161,16 +189,23 @@ class FileLoader:
                 decrypted.seek(0)
 
                 wb = load_workbook(decrypted, read_only=True, data_only=True)
-                self._check_cancel(cancel_event)
+                try:
+                    self._check_cancel(cancel_event)
+                    rows = _sheet_rows_from_workbook(wb)
+                finally:
+                    try:
+                        wb.close()
+                    except Exception:
+                        pass
 
-                rows = _sheet_rows_from_workbook(wb)
                 self._check_cancel(cancel_event)
 
                 df = pd.DataFrame(rows).fillna("")
                 return self._process_rows(
                     df.values.tolist(),
                     header_cleaning_mode=header_cleaning_mode,
-                    cancel_event=cancel_event)
+                    cancel_event=cancel_event,
+                )
 
             except RuntimeError as e:
                 if str(e) == CANCELLED_MSG:
@@ -178,7 +213,7 @@ class FileLoader:
                 raise
             except Exception:
                 self.logger.log("[LOAD] Incorrect password — try again or cancel.", "red")
-
+    
     def _process_rows(self, rows, header_cleaning_mode="none", cancel_event=None):
         self._check_cancel(cancel_event)
         if len(rows) < 4:

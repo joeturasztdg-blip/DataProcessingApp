@@ -1,15 +1,8 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import (
-    QDialog,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QVBoxLayout,
-)
+from PySide6.QtWidgets import QDialog,QHBoxLayout,QLabel,QPushButton,QVBoxLayout
 
 from gui.recipient_name_resolution_table import RecipientNameResolutionTable
-
 
 class RecipientNameResolutionDialog(QDialog):
     def __init__(self, rows, parent=None):
@@ -56,10 +49,7 @@ class RecipientNameResolutionDialog(QDialog):
 
         self._removed.update(selected)
 
-        kept_rows = [
-            row for i, row in enumerate(self.table.rows())
-            if i not in self._removed
-        ]
+        kept_rows = [row for i, row in enumerate(self.table.rows())if i not in self._removed]
         self.table.set_rows(kept_rows)
         self.count_label.setText(f"Rows requiring review: {len(kept_rows)}")
 

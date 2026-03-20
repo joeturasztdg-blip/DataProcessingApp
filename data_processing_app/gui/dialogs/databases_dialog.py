@@ -3,38 +3,22 @@ from __future__ import annotations
 import sqlite3
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (
-    QDialog,
-    QHBoxLayout,
-    QHeaderView,
-    QLabel,
-    QLineEdit,
-    QMessageBox,
-    QPushButton,
-    QTableWidget,
-    QTableWidgetItem,
-    QTabWidget,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import QDialog,QHBoxLayout,QHeaderView,QLabel,QLineEdit,QMessageBox,QPushButton,QTableWidget,QTableWidgetItem,QTabWidget,QVBoxLayout,QWidget
 
 from processing.repos.login_repo import LoginRepository
 from processing.repos.seeds_repo import SeedsRepository
 from processing.repos.services_repo import ServicesRepository
 from processing.repos.return_addresses_repo import ReturnAddressesRepository
 
-
 def _make_readonly_item(text: str) -> QTableWidgetItem:
     it = QTableWidgetItem(text)
     it.setFlags(it.flags() & ~Qt.ItemFlag.ItemIsEditable)
     return it
 
-
 def _make_editable_item(text: str) -> QTableWidgetItem:
     it = QTableWidgetItem(text)
     it.setFlags(it.flags() | Qt.ItemFlag.ItemIsEditable)
     return it
-
 
 def _make_readonly_id_item(value: int) -> QTableWidgetItem:
     it = QTableWidgetItem()
@@ -42,11 +26,9 @@ def _make_readonly_id_item(value: int) -> QTableWidgetItem:
     it.setFlags(it.flags() & ~Qt.ItemFlag.ItemIsEditable)
     return it
 
-
 def _get_cell_text(table: QTableWidget, r: int, c: int) -> str:
     it = table.item(r, c)
     return (it.text() if it else "").strip()
-
 
 class QueryDatabasesDialog(QDialog):
     def __init__(self, parent=None):
@@ -58,14 +40,8 @@ class QueryDatabasesDialog(QDialog):
         tabs = QTabWidget()
         root.addWidget(tabs)
 
-        mailmark_repo = LoginRepository(
-            db_filename="mailmark_logins.db",
-            table_name="mailmark_logins",
-        )
-        mixed_repo = LoginRepository(
-            db_filename="mixed_weight_logins.db",
-            table_name="mixed_weight_logins",
-        )
+        mailmark_repo = LoginRepository(db_filename="mailmark_logins.db",table_name="mailmark_logins")
+        mixed_repo = LoginRepository(db_filename="mixed_weight_logins.db",table_name="mixed_weight_logins")
         seeds_repo = SeedsRepository()
         services_repo = ServicesRepository()
         return_addresses_repo = ReturnAddressesRepository()
@@ -79,18 +55,8 @@ class QueryDatabasesDialog(QDialog):
         tabs.setCurrentIndex(0)
         self.resize(1040, 720)
 
-
 class _BaseBrowserTab(QWidget):
-    def __init__(
-        self,
-        *,
-        repo,
-        placeholder_text: str,
-        headers: list[str],
-        query_error_title: str,
-        stretch_last_section: bool,
-        parent=None,
-    ):
+    def __init__(self,*,repo,placeholder_text: str,headers: list[str],query_error_title: str,stretch_last_section: bool,parent=None,):
         super().__init__(parent)
         self.repo = repo
         self._new_row_indices: list[int] = []
@@ -117,10 +83,7 @@ class _BaseBrowserTab(QWidget):
 
         self.table = QTableWidget(0, len(headers))
         self.table.setHorizontalHeaderLabels(headers)
-        self.table.setEditTriggers(
-            QTableWidget.EditTrigger.DoubleClicked
-            | QTableWidget.EditTrigger.EditKeyPressed
-        )
+        self.table.setEditTriggers(QTableWidget.EditTrigger.DoubleClicked | QTableWidget.EditTrigger.EditKeyPressed)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectItems)
         self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.table.setSortingEnabled(True)
@@ -163,11 +126,7 @@ class _BaseBrowserTab(QWidget):
                     if c == 0:
                         self.table.setItem(r_i, c, _make_readonly_id_item(int(value or 0)))
                     else:
-                        self.table.setItem(
-                            r_i,
-                            c,
-                            _make_readonly_item("" if value is None else str(value)),
-                        )
+                        self.table.setItem(r_i,c,_make_readonly_item("" if value is None else str(value)))
 
             self.lbl_status.setText(f"Rows: {len(rows)}")
         finally:
@@ -286,14 +245,8 @@ class _BaseBrowserTab(QWidget):
 
 class _LoginBrowserTab(_BaseBrowserTab):
     def __init__(self, *, repo: LoginRepository, parent=None):
-        super().__init__(
-            repo=repo,
-            placeholder_text="Search name/username...",
-            headers=["ID", "Name", "Username", "Password"],
-            query_error_title="Query logins",
-            stretch_last_section=True,
-            parent=parent,
-        )
+        super().__init__(repo=repo,placeholder_text="Search name/username...",headers=["ID", "Name", "Username", "Password"],
+                         query_error_title="Query logins",stretch_last_section=True,parent=parent,)
 
     def _list_all_rows(self) -> list[dict]:
         return self.repo.list_all()
@@ -305,42 +258,24 @@ class _LoginBrowserTab(_BaseBrowserTab):
         return self.repo.next_id()
 
     def _row_to_display_values(self, row: dict) -> list:
-        return [
-            row.get("ID", 0),
-            row.get("Name", ""),
-            row.get("Username", ""),
-            row.get("Password", ""),
-        ]
+        return [row.get("ID", 0),row.get("Name", ""),row.get("Username", ""),row.get("Password", "")]
 
     def _extract_payload(self, r: int):
-        return (
-            self._row_id_from_table(r),
-            _get_cell_text(self.table, r, 1),
-            _get_cell_text(self.table, r, 2),
-            _get_cell_text(self.table, r, 3),
-        )
+        return (self._row_id_from_table(r),_get_cell_text(self.table, r, 1),_get_cell_text(self.table, r, 2),_get_cell_text(self.table, r, 3))
 
     def _insert_payloads(self, payloads: list):
         with self.repo._connect() as con:
             cur = con.cursor()
             for id_int, name, username, password in payloads:
-                cur.execute(
-                    f"INSERT INTO {self.repo.table_name} (ID, Name, Username, Password) VALUES (?, ?, ?, ?)",
-                    (id_int, name, username, password),
-                )
+                cur.execute(f"INSERT INTO {self.repo.table_name} (ID, Name, Username, Password) VALUES (?, ?, ?, ?)",
+                            (id_int, name, username, password))
             con.commit()
-
 
 class _SeedsBrowserTab(_BaseBrowserTab):
     def __init__(self, *, repo: SeedsRepository, parent=None):
-        super().__init__(
-            repo=repo,
-            placeholder_text="Search key/category/name...",
-            headers=["ID", "KEY", "Category", "Name", "Address 1", "Address 2", "Town", "Postcode", "DPS"],
-            query_error_title="Query seeds",
-            stretch_last_section=False,
-            parent=parent,
-        )
+        super().__init__(repo=repo,placeholder_text="Search key/category/name...",
+                         headers=["ID", "KEY", "Category", "Name", "Address 1", "Address 2", "Town", "Postcode", "DPS"],
+                         query_error_title="Query seeds",stretch_last_section=False,parent=parent)
 
     def _list_all_rows(self) -> list[dict]:
         return self.repo.list_all_rows()
@@ -352,66 +287,28 @@ class _SeedsBrowserTab(_BaseBrowserTab):
         return self.repo.next_id()
 
     def _row_to_display_values(self, row: dict) -> list:
-        return [
-            row.get("ID", 0),
-            row.get("KEY", ""),
-            row.get("Category", ""),
-            row.get("Name", ""),
-            row.get("Address_1", ""),
-            row.get("Address_2", ""),
-            row.get("Town", ""),
-            row.get("Postcode", ""),
-            row.get("DPS", ""),
-        ]
+        return [row.get("ID", 0),row.get("KEY", ""),row.get("Category", ""),row.get("Name", ""),
+                row.get("Address_1", ""),row.get("Address_2", ""),row.get("Town", ""),row.get("Postcode", ""),row.get("DPS", ""),]
 
     def _extract_payload(self, r: int):
-        return (
-            self._row_id_from_table(r),
-            _get_cell_text(self.table, r, 1),
-            _get_cell_text(self.table, r, 2),
-            _get_cell_text(self.table, r, 3),
-            _get_cell_text(self.table, r, 4),
-            _get_cell_text(self.table, r, 5),
-            _get_cell_text(self.table, r, 6),
-            _get_cell_text(self.table, r, 7),
-            _get_cell_text(self.table, r, 8),
-        )
+        return (self._row_id_from_table(r),_get_cell_text(self.table, r, 1),_get_cell_text(self.table, r, 2),_get_cell_text(self.table, r, 3),
+                _get_cell_text(self.table, r, 4),_get_cell_text(self.table, r, 5), _get_cell_text(self.table, r, 6),_get_cell_text(self.table, r, 7),_get_cell_text(self.table, r, 8),)
 
     def _insert_payloads(self, payloads: list):
         with self.repo._connect() as con:
             cur = con.cursor()
             for id_int, key, category, name, address_1, address_2, town, postcode, dps in payloads:
-                cur.execute(
-                    "INSERT INTO Seeds (ID, KEY, Category, Name, Address_1, Address_2, Town, Postcode, DPS) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (id_int, key, category, name, address_1, address_2, town, postcode, dps),
-                )
+                cur.execute("INSERT INTO Seeds (ID, KEY, Category, Name, Address_1, Address_2, Town, Postcode, DPS)"
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            (id_int, key, category, name, address_1, address_2, town, postcode, dps))
             con.commit()
-
 
 class _ServicesBrowserTab(_BaseBrowserTab):
     def __init__(self, *, repo: ServicesRepository, parent=None):
-        super().__init__(
-            repo=repo,
-            placeholder_text="Search name/code...",
-            headers=[
-                "ID",
-                "Name",
-                "New Code",
-                "Old Code",
-                "Replacement Code",
-                "Max Weight (g)",
-                "Min Length (mm)",
-                "Min Width (mm)",
-                "Min Height (mm)",
-                "Max Length (mm)",
-                "Max Width (mm)",
-                "Max Height (mm)",
-            ],
-            query_error_title="Query services",
-            stretch_last_section=False,
-            parent=parent,
-        )
+        super().__init__(repo=repo,placeholder_text="Search name/code...",headers=[
+            "ID","Name","New Code","Old Code","Replacement Code","Max Weight (g)",
+            "Min Length (mm)","Min Width (mm)","Min Height (mm)","Max Length (mm)","Max Width (mm)","Max Height (mm)"],
+            query_error_title="Query services",stretch_last_section=False,parent=parent)
 
     def _list_all_rows(self) -> list[dict]:
         return self.repo.list_all()
@@ -423,20 +320,9 @@ class _ServicesBrowserTab(_BaseBrowserTab):
         return self.repo.next_id()
 
     def _row_to_display_values(self, row: dict) -> list:
-        return [
-            row.get("id", 0),
-            row.get("name", ""),
-            row.get("new_code", ""),
-            row.get("old_code", ""),
-            row.get("replacement_code", ""),
-            row.get("max_weight_g", ""),
-            row.get("min_length_mm", ""),
-            row.get("min_width_mm", ""),
-            row.get("min_height_mm", ""),
-            row.get("max_length_mm", ""),
-            row.get("max_width_mm", ""),
-            row.get("max_height_mm", ""),
-        ]
+        return [row.get("id", 0),row.get("name", ""),row.get("new_code", ""),row.get("old_code", ""),row.get("replacement_code", ""),row.get("max_weight_g", ""),
+                row.get("min_length_mm", ""),row.get("min_width_mm", ""),row.get("min_height_mm", ""),row.get("max_length_mm", ""),
+                row.get("max_width_mm", ""),row.get("max_height_mm", "")]
 
     def _parse_optional_int(self, text: str) -> int | None:
         text = (text or "").strip()
@@ -456,84 +342,24 @@ class _ServicesBrowserTab(_BaseBrowserTab):
         except ValueError as e:
             raise ValueError(f"Row {r + 1}: numeric columns must contain valid integers.") from e
 
-        return (
-            self._row_id_from_table(r),
-            _get_cell_text(self.table, r, 1),
-            _get_cell_text(self.table, r, 2),
-            _get_cell_text(self.table, r, 3),
-            _get_cell_text(self.table, r, 4),
-            max_weight_g,
-            min_length_mm,
-            min_width_mm,
-            min_height_mm,
-            max_length_mm,
-            max_width_mm,
-            max_height_mm,
-        )
+        return (self._row_id_from_table(r),_get_cell_text(self.table, r, 1),_get_cell_text(self.table, r, 2),_get_cell_text(self.table, r, 3),_get_cell_text(self.table, r, 4),
+                max_weight_g,min_length_mm,min_width_mm,min_height_mm,max_length_mm,max_width_mm,max_height_mm)
 
     def _insert_payloads(self, payloads: list):
         with self.repo._connect() as con:
             cur = con.cursor()
-            for (
-                id_int,
-                name,
-                new_code,
-                old_code,
-                replacement_code,
-                max_weight_g,
-                min_length_mm,
-                min_width_mm,
-                min_height_mm,
-                max_length_mm,
-                max_width_mm,
-                max_height_mm,
-            ) in payloads:
-                cur.execute(
-                    f"""
-                    INSERT INTO {self.repo.table_name}
-                    (
-                        id,
-                        name,
-                        new_code,
-                        old_code,
-                        replacement_code,
-                        max_weight_g,
-                        min_length_mm,
-                        min_width_mm,
-                        min_height_mm,
-                        max_length_mm,
-                        max_width_mm,
-                        max_height_mm
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        id_int,
-                        name,
-                        new_code,
-                        old_code,
-                        replacement_code,
-                        max_weight_g,
-                        min_length_mm,
-                        min_width_mm,
-                        min_height_mm,
-                        max_length_mm,
-                        max_width_mm,
-                        max_height_mm,
-                    ),
-                )
+            for (id_int,name,new_code,old_code,replacement_code,max_weight_g,min_length_mm,min_width_mm,min_height_mm,max_length_mm,max_width_mm,max_height_mm) in payloads:
+                cur.execute(f"""INSERT INTO {self.repo.table_name} (id,name,new_code,old_code,replacement_code,max_weight_g,min_length_mm,
+                            min_width_mm,min_height_mm,max_length_mm,max_width_mm,max_height_mm)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (id_int,name,new_code,old_code,replacement_code,max_weight_g,min_length_mm,min_width_mm,min_height_mm,max_length_mm,max_width_mm,max_height_mm))
             con.commit()
 
 class _ReturnAddressesBrowserTab(_BaseBrowserTab):
     def __init__(self, *, repo: ReturnAddressesRepository, parent=None):
-        super().__init__(
-            repo=repo,
-            placeholder_text="Search contact/address/town/postcode...",
-            headers=["ID", "Contact Name", "Address 1", "Address 2", "Address 3", "Town", "Postcode"],
-            query_error_title="Query return addresses",
-            stretch_last_section=True,
-            parent=parent,
-        )
+        super().__init__(repo=repo,placeholder_text="Search contact/address/town/postcode...",
+                         headers=["ID", "Contact Name", "Address 1", "Address 2", "Address 3", "Town", "Postcode"],
+                         query_error_title="Query return addresses",stretch_last_section=True,parent=parent,)
 
     def _list_all_rows(self) -> list[dict]:
         return self.repo.list_all()
@@ -545,37 +371,15 @@ class _ReturnAddressesBrowserTab(_BaseBrowserTab):
         return self.repo.next_id()
 
     def _row_to_display_values(self, row: dict) -> list:
-        return [
-            row.get("ID", 0),
-            row.get("contact_name", ""),
-            row.get("address1", ""),
-            row.get("address2", ""),
-            row.get("address3", ""),
-            row.get("Town", ""),
-            row.get("postcode", ""),
-        ]
+        return [row.get("ID", 0),row.get("contact_name", ""),row.get("address1", ""),row.get("address2", ""),row.get("address3", ""),row.get("Town", ""),row.get("postcode", "")]
 
     def _extract_payload(self, r: int):
-        return (
-            self._row_id_from_table(r),
-            _get_cell_text(self.table, r, 1),
-            _get_cell_text(self.table, r, 2),
-            _get_cell_text(self.table, r, 3),
-            _get_cell_text(self.table, r, 4),
-            _get_cell_text(self.table, r, 5),
-            _get_cell_text(self.table, r, 6),
-        )
+        return (self._row_id_from_table(r),_get_cell_text(self.table, r, 1),_get_cell_text(self.table, r, 2),_get_cell_text(self.table, r, 3),
+                _get_cell_text(self.table, r, 4),_get_cell_text(self.table, r, 5),_get_cell_text(self.table, r, 6),)
 
     def _insert_payloads(self, payloads: list):
         with self.repo._connect() as con:
             cur = con.cursor()
             for row in payloads:
-                cur.execute(
-                    """
-                    INSERT INTO return_addresses
-                    (ID, contact_name, address1, address2, address3, Town, postcode)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    row,
-                )
+                cur.execute("INSERT INTO return_addresses (ID, contact_name, address1, address2, address3, Town, postcode) VALUES (?, ?, ?, ?, ?, ?, ?)",row)
             con.commit()

@@ -8,7 +8,6 @@ from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QListWidget, QPushBu
 
 from config.constants import SYSTEM_PRINTERS
 
-
 class BatchPdfPrintDialog(QDialog):
     print_requested = Signal()
     skip_requested = Signal()
@@ -49,7 +48,6 @@ class BatchPdfPrintDialog(QDialog):
         self.btn_next.clicked.connect(self.print_requested.emit)
 
         self.refresh()
-
     # ---------- batch helpers ----------
     def total_batches(self) -> int:
         return max(1, math.ceil(len(self.pdf_list) / self.batch_size))

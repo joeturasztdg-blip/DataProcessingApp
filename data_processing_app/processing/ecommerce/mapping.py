@@ -4,28 +4,11 @@ import pandas as pd
 
 from config.constants import PAF_COUNTY_COL, PAF_POSTCODE_COL, PAF_TOWN_COL
 
-
 class EcommerceMapping:
-    def build_preview_columns(
-        self,
-        *,
-        all_columns: list[str],
-        address_start: str | None,
-        address_end: str | None,
-        town_col: str | None,
-        county_col: str | None,
-        postcode_col: str,
-    ) -> list[str]:
+    def build_preview_columns(self,*,all_columns: list[str],address_start: str | None,address_end: str |
+                              None,town_col: str | None,county_col: str | None,postcode_col: str,) -> list[str]:
         address_columns: list[str] = []
-
-        if (
-            address_start
-            and address_end
-            and address_start != "__select__"
-            and address_end != "__select__"
-            and address_start in all_columns
-            and address_end in all_columns
-        ):
+        if (address_start and address_end and address_start != "__select__" and address_end != "__select__" and address_start in all_columns and address_end in all_columns):
             start_idx = all_columns.index(address_start)
             end_idx = all_columns.index(address_end)
 
@@ -50,14 +33,7 @@ class EcommerceMapping:
 
         return preview_columns
 
-    def build_paf_name_map(
-        self,
-        *,
-        preview_columns: list[str],
-        town_col: str | None,
-        county_col: str | None,
-        postcode_col: str,
-    ) -> dict[str, str]:
+    def build_paf_name_map(self,*,preview_columns: list[str],town_col: str | None,county_col: str | None,postcode_col: str) -> dict[str, str]:
         name_map: dict[str, str] = {}
 
         address_idx = 1
@@ -74,49 +50,18 @@ class EcommerceMapping:
 
         return name_map
 
-    def build_preview_specs(
-        self,
-        *,
-        preview_columns: list[str],
-        town_col: str | None,
-        county_col: str | None,
-        postcode_col: str,
-    ) -> list[dict[str, str]]:
-        paf_name_map = self.build_paf_name_map(
-            preview_columns=preview_columns,
-            town_col=town_col,
-            county_col=county_col,
-            postcode_col=postcode_col,
-        )
+    def build_preview_specs(self,*,preview_columns: list[str],town_col: str | None,county_col: str | None,postcode_col: str,) -> list[dict[str, str]]:
+        paf_name_map = self.build_paf_name_map(preview_columns=preview_columns,town_col=town_col,county_col=county_col,postcode_col=postcode_col,)
 
         specs: list[dict[str, str]] = []
         for src_col in preview_columns:
             paf_name = paf_name_map[src_col]
-            specs.append(
-                {
-                    "source": src_col,
-                    "paf": paf_name,
-                    "preview": f"{paf_name} (Preview)",
-                }
-            )
+            specs.append({"source": src_col,"paf": paf_name,"preview": f"{paf_name} (Preview)",})
         return specs
 
-    def rename_to_paf_columns(
-        self,
-        df: pd.DataFrame,
-        *,
-        preview_columns: list[str],
-        town_col: str | None,
-        county_col: str | None,
-        postcode_col: str,
-    ) -> pd.DataFrame:
+    def rename_to_paf_columns(self,df: pd.DataFrame,*,preview_columns: list[str],town_col: str | None,county_col: str | None,postcode_col: str,) -> pd.DataFrame:
         out = df.copy()
-        rename_map = self.build_paf_name_map(
-            preview_columns=preview_columns,
-            town_col=town_col,
-            county_col=county_col,
-            postcode_col=postcode_col,
-        )
+        rename_map = self.build_paf_name_map(preview_columns=preview_columns,town_col=town_col,county_col=county_col,postcode_col=postcode_col)
         out.rename(columns=rename_map, inplace=True)
         return out
 
@@ -132,10 +77,7 @@ class EcommerceMapping:
                     return (0, 999999)
             return (1, text.lower())
 
-        return sorted(
-            [str(c) for c in columns if str(c).startswith("PAF Address ")],
-            key=sort_key,
-        )
+        return sorted([str(c) for c in columns if str(c).startswith("PAF Address ")], key=sort_key)
 
     def order_ecommerce_output_columns(self, df: pd.DataFrame) -> pd.DataFrame:
         if df is None or df.empty:
@@ -150,32 +92,11 @@ class EcommerceMapping:
             if col in out.columns and col not in ordered:
                 ordered.append(col)
 
-        leading_fixed = [
-            "Client Item Reference",
-            "Recipient Name",
-            "Company",
-        ]
+        leading_fixed = ["Client Item Reference","Recipient Name","Company",]
 
-        service_block = [
-            "Service",
-            "Weight",
-            "Length",
-            "Width",
-            "Height",
-            "Country Code",
-            "Quantity",
-            "Product Description",
-            "Retail Value",
-        ]
+        service_block = ["Service","Weight","Length","Width","Height","Country Code","Quantity","Product Description","Retail Value",]
 
-        return_address_block = [
-            "Return Contact Name",
-            "Return Address 1",
-            "Return Address 2",
-            "Return Address 3",
-            "Return Town",
-            "Return Postcode",
-        ]
+        return_address_block = ["Return Contact Name","Return Address 1","Return Address 2","Return Address 3","Return Town","Return Postcode",]
 
         for col in leading_fixed:
             add(col)

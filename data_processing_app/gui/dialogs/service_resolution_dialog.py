@@ -1,18 +1,8 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import (
-    QComboBox,
-    QDialog,
-    QGroupBox,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QPushButton,
-    QVBoxLayout,
-)
+from PySide6.QtWidgets import QComboBox,QDialog,QGroupBox,QHBoxLayout,QLabel,QLineEdit,QPushButton,QVBoxLayout
 
 from gui.service_resolution_table import ServiceResolutionTable
-
 
 class ServiceResolutionDialog(QDialog):
     def __init__(self, rows, valid_services, parent=None):
@@ -83,10 +73,8 @@ class ServiceResolutionDialog(QDialog):
         return self.table.rows()
 
     def mass_update_values(self) -> dict[str, str]:
-        return {
-            "Service": self.service_combo.currentText().strip(),
-            "Length": self.length_edit.text().strip(),
-            "Width": self.width_edit.text().strip(),
-            "Height": self.height_edit.text().strip(),
-            "Weight": self.weight_edit.text().strip(),
-        }
+        return {"Service": self.service_combo.currentText().strip(),
+                "Length": self.length_edit.text().strip(),
+                "Width": self.width_edit.text().strip(),
+                "Height": self.height_edit.text().strip(),
+                "Weight": self.weight_edit.text().strip()}

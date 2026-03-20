@@ -19,7 +19,6 @@ from workspace.generate_password import GeneratePassword
 from workspace.print_pdf import PrintPdf
 from workspace.query_databases import QueryDatabases
 
-
 class MainWindow(QWidget):
     log_signal = Signal(str)
 

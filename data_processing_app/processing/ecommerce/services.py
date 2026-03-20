@@ -4,8 +4,8 @@ from typing import Any
 
 import pandas as pd
 
+from config.constants import MAX_SERVICE_DIMENSIONS, DEFAULT_WINDSOR_DETAILS
 from processing.repos.services_repo import ServicesRepository
-
 
 class EcommerceServices:
     def to_float_or_none(self, value) -> float | None:
@@ -39,10 +39,7 @@ class EcommerceServices:
     def normalise_service_code(self, value) -> str:
         return str(value or "").strip().upper()
 
-    def service_rule_maps(
-        self,
-        services_repo: ServicesRepository,
-    ) -> tuple[dict[str, dict], dict[str, dict]]:
+    def service_rule_maps(self,services_repo: ServicesRepository) -> tuple[dict[str, dict], dict[str, dict]]:
         rows = services_repo.list_all(limit=100000)
 
         by_new: dict[str, dict] = {}
@@ -59,39 +56,42 @@ class EcommerceServices:
 
         return by_new, by_old
 
-    def service_rule_cache(
-        self,
-        services_repo: ServicesRepository,
-    ) -> dict[str, Any]:
+    def service_rule_cache(self,services_repo: ServicesRepository) -> dict[str, Any]:
         by_new, by_old = self.service_rule_maps(services_repo)
         all_rules = list(by_new.values())
 
-        return {
-            "by_new": by_new,
-            "by_old": by_old,
-            "all_rules": all_rules,
-        }
+        return {"by_new": by_new,"by_old": by_old,"all_rules": all_rules,}
 
-    def find_service_rule(
-        self,
-        service_value: str,
-        by_new: dict[str, dict],
-        by_old: dict[str, dict],
-    ) -> dict | None:
+    def find_service_rule(self,service_value: str,by_new: dict[str, dict],by_old: dict[str, dict]) -> dict | None:
         key = self.normalise_service_code(service_value)
         if not key:
             return None
         return by_new.get(key) or by_old.get(key)
 
-    def service_fits_rule(
-        self,
-        *,
-        length_value,
-        width_value,
-        height_value,
-        weight_value,
-        rule: dict,
-    ) -> bool:
+    def canonical_service_code_from_rule(self,rule: dict | None,fallback: str = "") -> str:
+        if not rule:
+            return self.normalise_service_code(fallback)
+
+        replacement_code = self.normalise_service_code(rule.get("replacement_code"))
+        if replacement_code:
+            return replacement_code
+
+        new_code = self.normalise_service_code(rule.get("new_code"))
+        if new_code:
+            return new_code
+
+        old_code = self.normalise_service_code(rule.get("old_code"))
+        if old_code:
+            return old_code
+
+        return self.normalise_service_code(fallback)
+
+    def canonicalise_service_value(self,service_value,*,by_new: dict[str, dict],by_old: dict[str, dict]) -> str:
+        original = "" if pd.isna(service_value) else str(service_value).strip()
+        rule = self.find_service_rule(original, by_new, by_old)
+        return self.canonical_service_code_from_rule(rule, fallback=original)
+
+    def service_fits_rule(self,*,length_value,width_value,height_value,weight_value,rule: dict) -> bool:
         length = self.to_float_or_none(length_value)
         width = self.to_float_or_none(width_value)
         height = self.to_float_or_none(height_value)
@@ -106,11 +106,7 @@ class EcommerceServices:
         max_height = self.to_float_or_none(rule.get("max_height_mm"))
         max_weight = self.to_float_or_none(rule.get("max_weight_g"))
 
-        dimension_pairs = [
-            (length, min_length, max_length),
-            (width, min_width, max_width),
-            (height, min_height, max_height),
-        ]
+        dimension_pairs = [(length, min_length, max_length),(width, min_width, max_width),(height, min_height, max_height)]
 
         for value, min_v, max_v in dimension_pairs:
             if value is None:
@@ -126,32 +122,14 @@ class EcommerceServices:
         return True
 
     def service_display_code(self, rule: dict) -> str:
-        old_code = self.normalise_service_code(rule.get("old_code"))
-        new_code = self.normalise_service_code(rule.get("new_code"))
-        return old_code or new_code
+        return self.canonical_service_code_from_rule(rule)
 
-    def service_reject_reason(
-        self,
-        *,
-        service_value,
-        length_value,
-        width_value,
-        height_value,
-        weight_value,
-        by_new: dict[str, dict],
-        by_old: dict[str, dict],
-    ) -> str | None:
+    def service_reject_reason(self,*,service_value,length_value,width_value,height_value,weight_value,by_new: dict[str, dict],by_old: dict[str, dict]) -> str | None:
         rule = self.find_service_rule(service_value, by_new, by_old)
         if rule is None:
             return "Invalid Service"
 
-        if not self.service_fits_rule(
-            length_value=length_value,
-            width_value=width_value,
-            height_value=height_value,
-            weight_value=weight_value,
-            rule=rule,
-        ):
+        if not self.service_fits_rule(length_value=length_value,width_value=width_value,height_value=height_value,weight_value=weight_value,rule=rule,):
             max_weight = self.to_float_or_none(rule.get("max_weight_g"))
             weight = self.to_float_or_none(weight_value)
             if weight is not None and max_weight is not None and weight > max_weight:
@@ -160,12 +138,7 @@ class EcommerceServices:
 
         return None
 
-    def valid_services_for_rows(
-        self,
-        rows: list[dict[str, Any]],
-        *,
-        all_rules: list[dict],
-    ) -> list[str]:
+    def valid_services_for_rows(self,rows: list[dict[str, Any]],*,all_rules: list[dict],) -> list[str]:
         valid_codes: list[str] = []
         seen: set[str] = set()
 
@@ -175,13 +148,7 @@ class EcommerceServices:
                 continue
 
             for row in rows:
-                if self.service_fits_rule(
-                    length_value=row.get("Length"),
-                    width_value=row.get("Width"),
-                    height_value=row.get("Height"),
-                    weight_value=row.get("Weight"),
-                    rule=rule,
-                ):
+                if self.service_fits_rule(length_value=row.get("Length"),width_value=row.get("Width"),height_value=row.get("Height"),weight_value=row.get("Weight"),rule=rule,):
                     seen.add(code)
                     valid_codes.append(code)
                     break
@@ -189,13 +156,7 @@ class EcommerceServices:
         valid_codes.sort()
         return valid_codes
 
-    def apply_max_service_dimensions(
-        self,
-        df: pd.DataFrame,
-        *,
-        services_repo: ServicesRepository,
-        service_column: str = "Service",
-    ) -> pd.DataFrame:
+    def apply_max_service_dimensions(self,df: pd.DataFrame,*,services_repo: ServicesRepository,service_column: str = "Service",) -> pd.DataFrame:
         out = df.copy()
 
         if service_column not in out.columns:
@@ -217,11 +178,19 @@ class EcommerceServices:
                 return values[-1] if values else ""
             return "" if pd.isna(value) else str(value).strip()
 
-        def rule_or_existing(rule_value, existing_value) -> str:
+        def fallback_dimension(column_name: str, existing_value: str) -> str:
+            fallback = str(MAX_SERVICE_DIMENSIONS.get(column_name, "") or "").strip()
+            return fallback or existing_value
+
+        def rule_or_fallback(rule_value, column_name: str, existing_value: str) -> str:
             if pd.isna(rule_value):
-                return existing_value
+                return fallback_dimension(column_name, existing_value)
+
             text = str(rule_value).strip()
-            return text if text else existing_value
+            if text:
+                return text
+
+            return fallback_dimension(column_name, existing_value)
 
         lengths: list[str] = []
         widths: list[str] = []
@@ -241,48 +210,25 @@ class EcommerceServices:
                 heights.append(existing_height)
                 continue
 
-            lengths.append(rule_or_existing(rule.get("max_length_mm"), existing_length))
-            widths.append(rule_or_existing(rule.get("max_width_mm"), existing_width))
-            heights.append(rule_or_existing(rule.get("max_height_mm"), existing_height))
+            lengths.append(rule_or_fallback(rule.get("max_length_mm"), "Length", existing_length))
+            widths.append(rule_or_fallback(rule.get("max_width_mm"), "Width", existing_width))
+            heights.append(rule_or_fallback(rule.get("max_height_mm"), "Height", existing_height))
 
         out["Length"] = lengths
         out["Width"] = widths
         out["Height"] = heights
         return out
 
-    def use_old_service_code(
-        self,
-        df: pd.DataFrame,
-        *,
-        services_repo: ServicesRepository,
-        service_column: str = "Service",
-    ) -> pd.DataFrame:
+    def use_replacement_service_code(self,df: pd.DataFrame,*,services_repo: ServicesRepository,service_column: str = "Service",) -> pd.DataFrame:
         out = df.copy()
 
         if service_column not in out.columns:
             return out
-
-        raw_values = out[service_column].fillna("").astype(str)
-        keys = raw_values.map(lambda v: v.strip().upper())
-
-        lookup = services_repo.get_replacement_codes_by_new_codes(keys.tolist())
-
-        if not lookup:
-            return out
-
-        out[service_column] = [
-            lookup.get(key, original)
-            for original, key in zip(raw_values.tolist(), keys.tolist())
-        ]
-
+        by_new, by_old = self.service_rule_maps(services_repo)
+        out[service_column] = out[service_column].map(lambda value: self.canonicalise_service_value(value,by_new=by_new,by_old=by_old))
         return out
 
-    def collect_service_resolution_state(
-        self,
-        df: pd.DataFrame,
-        *,
-        rule_cache: dict[str, Any],
-    ) -> dict[str, Any]:
+    def collect_service_resolution_state(self,df: pd.DataFrame,*,rule_cache: dict[str, Any],) -> dict[str, Any]:
         by_new = rule_cache["by_new"]
         by_old = rule_cache["by_old"]
 
@@ -292,62 +238,35 @@ class EcommerceServices:
         required_cols = ["Length", "Width", "Height", "Weight", "Service"]
         for col in required_cols:
             if col not in df.columns:
-                return {
-                    "resolution_indices": [],
-                    "rows": [],
-                    "valid_services": [],
-                }
+                return {"resolution_indices": [],"rows": [],"valid_services": [],}
 
         for idx, row in df.iterrows():
-            reject_reason = self.service_reject_reason(
-                service_value=row.get("Service"),
-                length_value=row.get("Length"),
-                width_value=row.get("Width"),
-                height_value=row.get("Height"),
-                weight_value=row.get("Weight"),
-                by_new=by_new,
-                by_old=by_old,
-            )
-
+            reject_reason = self.service_reject_reason(service_value=row.get("Service"),length_value=row.get("Length"),width_value=row.get("Width"),
+                                                       height_value=row.get("Height"),weight_value=row.get("Weight"),by_new=by_new,by_old=by_old)
             if not reject_reason:
                 continue
 
             resolution_indices.append(int(idx))
             rows.append(
-                {
-                    "Length": "" if pd.isna(row.get("Length")) else str(row.get("Length")),
-                    "Width": "" if pd.isna(row.get("Width")) else str(row.get("Width")),
-                    "Height": "" if pd.isna(row.get("Height")) else str(row.get("Height")),
-                    "Weight": "" if pd.isna(row.get("Weight")) else str(row.get("Weight")),
-                    "Service": "" if pd.isna(row.get("Service")) else str(row.get("Service")),
-                    "Reject Reason": reject_reason,
-                }
-            )
+                {"Length": "" if pd.isna(row.get("Length")) else str(row.get("Length")),
+                 "Width": "" if pd.isna(row.get("Width")) else str(row.get("Width")),
+                 "Height": "" if pd.isna(row.get("Height")) else str(row.get("Height")),
+                 "Weight": "" if pd.isna(row.get("Weight")) else str(row.get("Weight")),
+                 "Service": "" if pd.isna(row.get("Service")) else str(row.get("Service")),
+                 "Reject Reason": reject_reason})
 
-        valid_services = self.valid_services_for_rows(
-            rows,
-            all_rules=rule_cache["all_rules"],
-        )
+        valid_services = self.valid_services_for_rows(rows,all_rules=rule_cache["all_rules"])
 
-        return {
-            "resolution_indices": resolution_indices,
-            "rows": rows,
-            "valid_services": valid_services,
-        }
+        return {"resolution_indices": resolution_indices,"rows": rows,"valid_services": valid_services,}
 
-    def apply_service_resolution_result(
-        self,
-        df: pd.DataFrame,
-        *,
-        resolution_indices: list[int],
-        result: dict[str, Any],
-        use_max_service_dimensions: bool = False,
-        services_repo: ServicesRepository,
-    ) -> pd.DataFrame:
+    def apply_service_resolution_result(self,df: pd.DataFrame,*,resolution_indices: list[int],result: dict[str, Any],
+                                        use_max_service_dimensions: bool = False,services_repo: ServicesRepository,) -> pd.DataFrame:
         out = df.copy()
         edited_rows = list(result.get("rows", []) or [])
         original_rows = list(result.get("original_rows", []) or [])
         mass_update = dict(result.get("mass_update") or {})
+
+        by_new, by_old = self.service_rule_maps(services_repo)
 
         if use_max_service_dimensions:
             bulk_fields = ("Weight", "Service")
@@ -384,39 +303,26 @@ class EcommerceServices:
                 if edited_value != original_value:
                     value_to_write = edited_value
 
+                if col == "Service":
+                    value_to_write = self.canonicalise_service_value(value_to_write,by_new=by_new,by_old=by_old)
+
                 out.loc[idx, col] = value_to_write
 
         if use_max_service_dimensions:
-            out = self.apply_max_service_dimensions(
-                out,
-                services_repo=services_repo,
-                service_column="Service",
-            )
+            out = self.apply_max_service_dimensions(out,services_repo=services_repo,service_column="Service",)
 
         return out
 
-    def split_valid_and_service_rejects(
-        self,
-        df: pd.DataFrame,
-        *,
-        services_repo: ServicesRepository,
-    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    def split_valid_and_service_rejects(self,df: pd.DataFrame,*,services_repo: ServicesRepository) -> tuple[pd.DataFrame, pd.DataFrame]:
         by_new, by_old = self.service_rule_maps(services_repo)
 
         valid_indices: list[int] = []
         reject_rows: list[dict[str, Any]] = []
 
         for idx, row in df.iterrows():
-            reject_reason = self.service_reject_reason(
-                service_value=row.get("Service"),
-                length_value=row.get("Length"),
-                width_value=row.get("Width"),
-                height_value=row.get("Height"),
-                weight_value=row.get("Weight"),
-                by_new=by_new,
-                by_old=by_old,
-            )
-
+            reject_reason = self.service_reject_reason(service_value=row.get("Service"),length_value=row.get("Length"),
+                                                       width_value=row.get("Width"),height_value=row.get("Height"),weight_value=row.get("Weight"),
+                                                       by_new=by_new,by_old=by_old)
             if reject_reason:
                 reject_row = row.to_dict()
                 reject_row["Reject Reason"] = reject_reason
@@ -432,3 +338,11 @@ class EcommerceServices:
             reject_df.reset_index(drop=True, inplace=True)
 
         return valid_df, reject_df
+
+    def apply_default_windsor_details(self, df: pd.DataFrame) -> pd.DataFrame:
+        out = df.copy()
+
+        for col, value in DEFAULT_WINDSOR_DETAILS.items():
+            out[col] = value
+
+        return out

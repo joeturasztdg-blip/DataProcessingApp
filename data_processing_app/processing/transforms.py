@@ -61,9 +61,7 @@ class DomainTransforms:
         pat = re.compile(r"\b(UCID1|UCID2)\b")
         for col in df.columns:
             if is_object_dtype(df[col]):
-                df[col] = df[col].astype(str).str.replace(
-                    pat, lambda m: f"UCID {ucid_map[m.group(1)]}", regex=True
-                )
+                df[col] = df[col].astype(str).str.replace(pat, lambda m: f"UCID {ucid_map[m.group(1)]}", regex=True)
         return df
     
     @staticmethod

@@ -5,14 +5,7 @@ import tempfile
 
 import fitz
 
-from config.constants import (
-    PDF_LABEL_WIDTH_PT,
-    PDF_LABEL_HEIGHT_PT,
-    PDF_LABEL_FONT,
-    PDF_LABEL_FONT_SIZE,
-    PDF_LABEL_ROTATE,
-)
-
+from config.constants import PDF_LABEL_WIDTH_PT,PDF_LABEL_HEIGHT_PT,PDF_LABEL_FONT,PDF_LABEL_FONT_SIZE,PDF_LABEL_ROTATE
 
 def append_label(input_pdf: str, enabled: bool) -> str:
     if not enabled:
@@ -31,15 +24,7 @@ def append_label(input_pdf: str, enabled: bool) -> str:
     page = out.new_page(width=PDF_LABEL_WIDTH_PT, height=PDF_LABEL_HEIGHT_PT)
     rect = fitz.Rect(0, 0, PDF_LABEL_WIDTH_PT, PDF_LABEL_HEIGHT_PT)
 
-    page.insert_textbox(
-        rect,
-        label_text,
-        fontsize=PDF_LABEL_FONT_SIZE,
-        fontname=PDF_LABEL_FONT,
-        color=(0, 0, 0),
-        align=fitz.TEXT_ALIGN_CENTER,
-        rotate=PDF_LABEL_ROTATE,
-    )
+    page.insert_textbox(rect,label_text,fontsize=PDF_LABEL_FONT_SIZE,fontname=PDF_LABEL_FONT,color=(0, 0, 0),align=fitz.TEXT_ALIGN_CENTER,rotate=PDF_LABEL_ROTATE,)
 
     out.save(temp_out)
     out.close()

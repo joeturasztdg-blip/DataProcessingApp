@@ -2,28 +2,12 @@ from __future__ import annotations
 
 import pandas as pd
 
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QLabel,
-    QPushButton, QHBoxLayout, QMessageBox
-)
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel,QPushButton, QHBoxLayout, QMessageBox
 
 from gui.paf_resolution_table import PAFResolutionTable
 
-
 class PAFResolutionDialog(QDialog):
-
-    def __init__(
-        self,
-        current_postcodes,
-        issue_labels,
-        row_previews,
-        *,
-        preview_specs,
-        postcode_column,
-        town_column,
-        normalizer,
-        parent=None,
-    ):
+    def __init__(self,current_postcodes,issue_labels,row_previews,*,preview_specs,postcode_column,town_column,normalizer,parent=None):
         super().__init__(parent)
 
         self.setWindowTitle("Resolve PAF Fields")
@@ -37,14 +21,8 @@ class PAFResolutionDialog(QDialog):
         self.town_column = str(town_column)
         self.normalizer = normalizer
 
-        self.preview_to_source = {
-            str(spec["preview"]): str(spec["source"])
-            for spec in self.preview_specs
-        }
-        self.source_to_preview = {
-            str(spec["source"]): str(spec["preview"])
-            for spec in self.preview_specs
-        }
+        self.preview_to_source = {str(spec["preview"]): str(spec["source"])for spec in self.preview_specs}
+        self.source_to_preview = {str(spec["source"]): str(spec["preview"])for spec in self.preview_specs}
         self.postcode_preview_column = self.source_to_preview.get(self.postcode_column, self.postcode_column)
         self.town_preview_column = self.source_to_preview.get(self.town_column, self.town_column)
 
@@ -158,14 +136,9 @@ class PAFResolutionDialog(QDialog):
         return str(value).strip()
 
     def _record_history(self, idx: int):
-        self.history.append({
-            "idx": idx,
-            "prev_corrected": self.corrected.get(idx),
-            "prev_added": self.added.get(idx),
-            "prev_removed": idx in self.removed,
-            "prev_row_preview": dict(self.row_previews[idx]) if idx < len(self.row_previews) else {},
-            "prev_row_update": dict(self.row_updates[idx]) if idx in self.row_updates else None,
-        })
+        self.history.append({"idx": idx,"prev_corrected": self.corrected.get(idx),"prev_added": self.added.get(idx),
+                             "prev_removed": idx in self.removed,"prev_row_preview": dict(self.row_previews[idx]) if idx < len(self.row_previews) else {},
+                             "prev_row_update": dict(self.row_updates[idx]) if idx in self.row_updates else None,})
         self.undo_btn.setEnabled(True)
 
     def _update_record(self):
@@ -233,7 +206,6 @@ class PAFResolutionDialog(QDialog):
     def _undo(self):
         if not self.history:
             return
-
         state = self.history.pop()
         idx = state["idx"]
 
@@ -271,9 +243,4 @@ class PAFResolutionDialog(QDialog):
             self.accept()
 
     def result(self):
-        return {
-            "corrected": self.corrected,
-            "added": self.added,
-            "removed": self.removed,
-            "row_updates": self.row_updates,
-        }
+        return {"corrected": self.corrected,"added": self.added,"removed": self.removed,"row_updates": self.row_updates,}

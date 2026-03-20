@@ -6,7 +6,7 @@ from gui.toggle_switch import ToggleSwitch
 from gui.dialogs.options.bindings import ExtrasBinding, ControlBinding, DynamicMultiBinding
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QRadioButton,QComboBox,QLineEdit,QLabel,QGroupBox,QScrollArea,
+from PySide6.QtWidgets import (QWidget,QVBoxLayout,QHBoxLayout,QRadioButton, QButtonGroup, QComboBox,QLineEdit,QLabel,QGroupBox,QScrollArea,
                                QCheckBox,QFrame,QStyle,QStackedLayout,QTableWidget,QTableWidgetItem,QAbstractItemView,QHeaderView,QSpinBox)
 
 class DialogBuilder:
@@ -20,10 +20,12 @@ class DialogBuilder:
         self._builders = {
             "radio": self._build_radio,
             "radio_with_extras": self._build_radio_with_extras,
+            "radio_with_shared_extras": self._build_radio_with_shared_extras,
             "select": self._build_select,
             "text": self._build_text,
             "compact_select": self._build_compact_select,
             "compact_select_row": self._build_compact_select_row,
+            "labeled_select_row": self._build_labeled_select_row,
             "toggle_select": self._build_toggle_select,
             "switch_with_extras": self._build_switch_with_extras,
             "multi_select": self._build_multi_select,
@@ -143,119 +145,163 @@ class DialogBuilder:
         return box
 
     def _build_radio_with_extras(self, cfg: dict) -> QWidget:
-        box = QGroupBox(cfg["label"])
-        layout = QVBoxLayout(box)
+        container = QWidget()
+        outer = QVBoxLayout(container)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(6)
 
-        options = cfg.get("options", []) or []
-        default = cfg.get("default")
-        orientation = (cfg.get("orientation") or "vertical").lower()
+        label_text = str(cfg.get("label", "")).strip()
+        if label_text:
+            outer.addWidget(QLabel(label_text))
 
-        radios: list[QRadioButton] = []
+        orientation = str(cfg.get("orientation", "vertical")).lower()
+        radio_row = QHBoxLayout() if orientation == "horizontal" else QVBoxLayout()
+        radio_row.setContentsMargins(0, 0, 0, 0)
+        radio_row.setSpacing(10 if orientation == "horizontal" else 4)
 
-        if orientation == "horizontal":
-            row = QHBoxLayout()
-            layout.addLayout(row)
-            for opt in options:
-                if not isinstance(opt, dict):
-                    raise ValueError("radio_with_extras expects dict options with label/value/extras")
-                rb = self._make_radio(
-                    str(opt.get("label", "")),
-                    opt.get("value"),
-                    checked=(opt.get("value") == default),
-                )
-                row.addWidget(rb)
-                radios.append(rb)
-            row.addStretch()
-        else:
-            for opt in options:
-                if not isinstance(opt, dict):
-                    raise ValueError("radio_with_extras expects dict options with label/value/extras")
-                rb = self._make_radio(
-                    str(opt.get("label", "")),
-                    opt.get("value"),
-                    checked=(opt.get("value") == default),
-                )
-                layout.addWidget(rb)
-                radios.append(rb)
+        button_group = QButtonGroup(container)
+        buttons_by_value: dict[str, QRadioButton] = {}
+        options_by_value: dict[str, dict] = {}
 
-        get_selected = lambda: self._get_checked_value(radios, default=default)
+        default_value = str(cfg.get("default", ""))
+        extras_host = QWidget()
+        extras_layout = QVBoxLayout(extras_host)
+        extras_layout.setContentsMargins(20, 0, 0, 0)
+        extras_layout.setSpacing(6)
 
-        shared_extras = cfg.get("shared_extras")
-        disable_value = cfg.get("disable_value", "none")
+        def clear_layout(layout):
+            while layout.count():
+                item = layout.takeAt(0)
+                widget = item.widget()
+                child_layout = item.layout()
+                if widget is not None:
+                    widget.deleteLater()
+                elif child_layout is not None:
+                    clear_layout(child_layout)
 
-        if shared_extras:
-            spacer = QWidget()
-            extras_layout = QVBoxLayout(spacer)
-            extras_layout.setContentsMargins(25, 0, 0, 0)
-            layout.addWidget(spacer)
+        def selected_value() -> str:
+            for value, btn in buttons_by_value.items():
+                if btn.isChecked():
+                    return value
+            return default_value
 
-            extras = self._build_extras_controller(
-                base_layout=extras_layout,
-                extras_cfg={"__enabled__": shared_extras},
-                is_enabled_fn=lambda: get_selected() != disable_value,
-                get_value_fn=get_selected,
-            )
+        def rebuild_extras() -> None:
+            clear_layout(extras_layout)
 
-            def refresh_extras():
-                extras.refresh()
-                self.refresh_all()
+            selected = selected_value()
+            option_cfg = options_by_value.get(selected, {})
+            extras = option_cfg.get("extras", []) or []
 
-            for rb in radios:
-                rb.toggled.connect(refresh_extras)
+            for extra_cfg in extras:
+                widget = self.build(extra_cfg)
+                extras_layout.addWidget(widget)
 
-            extras.refresh()
-
-            def read():
-                result = {"value": get_selected()}
-                extras.read_into(result)
-                return result
-
-            self._register_binding(cfg["key"], box, read, cfg)
-            return box
-
-        extras_layout_map: dict[Any, QVBoxLayout] = {}
-        for opt in options:
-            if not isinstance(opt, dict):
-                continue
-            value = opt.get("value")
-            if opt.get("extras"):
-                spacer = QWidget()
-                spacer_layout = QVBoxLayout(spacer)
-                spacer_layout.setContentsMargins(25, 0, 0, 0)
-                layout.addWidget(spacer)
-                extras_layout_map[value] = spacer_layout
-
-        extras_cfg = {
-            opt.get("value"): opt.get("extras")
-            for opt in options
-            if isinstance(opt, dict) and opt.get("extras")
-        }
-
-        extras = self._build_extras_controller(
-            base_layout=layout,
-            extras_cfg=extras_cfg,
-            is_enabled_fn=lambda: True,
-            get_value_fn=get_selected,
-            layout_override=extras_layout_map,
-        )
-
-        def refresh_extras():
-            extras.refresh()
             self.refresh_all()
 
-        for rb in radios:
-            rb.toggled.connect(refresh_extras)
+        for i, option in enumerate(cfg.get("options", [])):
+            option_label = str(option["label"])
+            option_value = str(option["value"])
 
-        extras.refresh()
+            btn = QRadioButton(option_label)
+            button_group.addButton(btn, i)
+            buttons_by_value[option_value] = btn
+            options_by_value[option_value] = option
 
-        def read():
-            result = {"value": get_selected()}
-            extras.read_into(result)
-            return result
+            if option_value == default_value:
+                btn.setChecked(True)
 
-        self._register_binding(cfg["key"], box, read, cfg)
+            btn.toggled.connect(rebuild_extras)
+            radio_row.addWidget(btn)
+
+        if orientation == "horizontal":
+            radio_row.addStretch()
+
+        outer.addLayout(radio_row)
+        outer.addWidget(extras_host)
+
+        self._register_binding(
+            cfg["key"],
+            container,
+            selected_value,
+            cfg,
+        )
+
+        rebuild_extras()
+        return container
+    
+    def _build_radio_with_shared_extras(self, cfg: dict) -> QWidget:
+        box = QGroupBox(cfg.get("label", ""))
+        layout = QVBoxLayout(box)
+        layout.setContentsMargins(12, 22, 12, 12)
+        layout.setSpacing(8)
+
+        orientation = str(cfg.get("orientation", "vertical")).lower()
+        radio_row = QHBoxLayout() if orientation == "horizontal" else QVBoxLayout()
+        radio_row.setContentsMargins(0, 0, 0, 0)
+        radio_row.setSpacing(10 if orientation == "horizontal" else 4)
+
+        button_group = QButtonGroup(box)
+        buttons_by_value: dict[str, QRadioButton] = {}
+
+        default_value = str(cfg.get("default", ""))
+        disable_value = str(cfg.get("disable_value", ""))
+
+        for i, option in enumerate(cfg.get("options", [])):
+            option_label = str(option["label"])
+            option_value = str(option["value"])
+
+            btn = QRadioButton(option_label)
+            button_group.addButton(btn, i)
+            buttons_by_value[option_value] = btn
+
+            if option_value == default_value:
+                btn.setChecked(True)
+
+            radio_row.addWidget(btn)
+
+        if orientation == "horizontal":
+            radio_row.addStretch()
+
+        layout.addLayout(radio_row)
+
+        extras_host = QWidget()
+        extras_layout = QVBoxLayout(extras_host)
+        extras_layout.setContentsMargins(0, 0, 0, 0)
+        extras_layout.setSpacing(6)
+
+        shared_widgets: list[QWidget] = []
+        for extra_cfg in cfg.get("shared_extras", []) or []:
+            widget = self.build(extra_cfg)
+            extras_layout.addWidget(widget)
+            shared_widgets.append(widget)
+
+        layout.addWidget(extras_host)
+
+        def selected_value() -> str:
+            for value, btn in buttons_by_value.items():
+                if btn.isChecked():
+                    return value
+            return default_value
+
+        def update_state() -> None:
+            enabled = selected_value() != disable_value
+            for widget in shared_widgets:
+                widget.setEnabled(enabled)
+            self.refresh_all()
+
+        self._register_binding(
+            cfg["key"],
+            box,
+            selected_value,
+            cfg,
+        )
+
+        for btn in buttons_by_value.values():
+            btn.toggled.connect(update_state)
+
+        update_state()
         return box
-
+    
     def _build_switch_with_extras(self, cfg: dict) -> QWidget:
         container = QWidget()
         layout = QHBoxLayout(container)
@@ -713,6 +759,28 @@ class DialogBuilder:
         for child in cfg.get("children", []):
             layout.addWidget(self.build(child), 1)
 
+        return container
+
+    def _build_labeled_select_row(self, cfg: dict) -> QWidget:
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        label = QLabel(str(cfg.get("label", "")))
+        label.setMinimumWidth(int(cfg.get("label_width", 80)))
+        layout.addWidget(label)
+
+        combo = self._make_combo(
+            options=cfg.get("options", []),
+            default=cfg.get("default"),
+            enabled=True,
+            visible=True,
+        )
+        layout.addWidget(combo, 1)
+
+        self._register_binding(cfg["key"], container, lambda: combo.currentData(), cfg)
+        combo.currentIndexChanged.connect(self.refresh_all)
         return container
 
     def _build_checkbox(self, cfg: dict) -> QWidget:

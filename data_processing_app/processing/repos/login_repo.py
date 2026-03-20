@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-import sys
 import sqlite3
 from typing import List, Dict, Any, Optional
 
@@ -17,13 +15,7 @@ class LoginRepository:
 
     def list_all(self, limit: int = 5000) -> List[Dict[str, Any]]:
         with self._connect() as con:
-            rows = con.execute(
-                f"""
-                SELECT ID, Name, Username, Password
-                FROM {self.table_name}
-                ORDER BY ID ASC
-                LIMIT ?
-                """,
+            rows = con.execute(f"SELECT ID, Name, Username, Password FROM {self.table_name} ORDER BY ID ASC LIMIT ?",
                 (int(limit),)).fetchall()
         return [dict(r) for r in rows]
 
@@ -34,14 +26,7 @@ class LoginRepository:
 
         pattern = f"%{q}%"
         with self._connect() as con:
-            rows = con.execute(
-                f"""
-                SELECT ID, Name, Username, Password
-                FROM {self.table_name}
-                WHERE Name LIKE ? OR Username LIKE ?
-                ORDER BY ID ASC
-                LIMIT ?
-                """,
+            rows = con.execute(f"SELECT ID, Name, Username, Password FROM {self.table_name} WHERE Name LIKE ? OR Username LIKE ? ORDER BY ID ASC LIMIT ?",
                 (pattern, pattern, int(limit))).fetchall()
         return [dict(r) for r in rows]
 

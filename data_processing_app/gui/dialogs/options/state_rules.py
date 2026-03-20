@@ -26,9 +26,7 @@ class StateRules:
         self._last_use_max_service_dimensions = use_max
 
         use_windsor = bool(self.ctx.get("use_windsor_agreement_defaults"))
-        just_checked_windsor = (
-            use_windsor and (self._last_use_windsor_agreement_defaults is not True)
-        )
+        just_checked_windsor = (use_windsor and (self._last_use_windsor_agreement_defaults is not True))
 
         if just_checked_windsor:
             for prefix in ("country_code", "product_description", "quantity", "retail_value"):

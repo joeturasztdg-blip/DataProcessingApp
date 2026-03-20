@@ -25,37 +25,17 @@ class OptionsDialog(QDialog):
         self.setMinimumSize(*minimum_size)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
-        self.rules = DialogRules(
-            ctx=self.ctx,
-            schema=self.schema,
-            ok_button_getter=lambda: self._ok_button,
-        )
+        self.rules = DialogRules(ctx=self.ctx,schema=self.schema,ok_button_getter=lambda: self._ok_button,)
 
-        self.factory = DialogBuilder(
-            ctx=self.ctx,
-            rules=self.rules,
-            mutex=None,
-            refresh_all=self.refresh_all,
-            sync_item_split_numbers=self.rules.sync_item_split_numbers,
-        )
+        self.factory = DialogBuilder(ctx=self.ctx,rules=self.rules,mutex=None,
+                                     refresh_all=self.refresh_all,sync_item_split_numbers=self.rules.sync_item_split_numbers,)
 
-        self.mutex = DialogMutexController(
-            ctx=self.ctx,
-            iter_options=self.factory._iter_options,
-        )
+        self.mutex = DialogMutexController(ctx=self.ctx,iter_options=self.factory._iter_options,)
         self.factory.mutex = self.mutex
 
-        self.pagers = PagerManager(
-            rule_matches=self.rules.rule_matches,
-            widget_for=self.ctx.widget_for,
-        )
+        self.pagers = PagerManager(rule_matches=self.rules.rule_matches,widget_for=self.ctx.widget_for)
         
-        self.state_rules = StateRules(
-                self.ctx,
-                self.rules,
-                self.mutex,
-                self._set_bound_widget_enabled
-            )
+        self.state_rules = StateRules(self.ctx,self.rules,self.mutex,self._set_bound_widget_enabled)
 
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(8, 8, 8, 8)
@@ -179,10 +159,7 @@ class OptionsDialog(QDialog):
 
     def keyPressEvent(self, event: QKeyEvent):
         if self.pagers.active_group and event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down):
-            self.pagers.move(
-                self.pagers.active_group,
-                -1 if event.key() == Qt.Key.Key_Up else 1,
-            )
+            self.pagers.move(self.pagers.active_group,-1 if event.key() == Qt.Key.Key_Up else 1)
             return
         super().keyPressEvent(event)
 

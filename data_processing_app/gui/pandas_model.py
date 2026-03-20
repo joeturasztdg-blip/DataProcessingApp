@@ -42,13 +42,7 @@ class DragDropPandasModel(QAbstractTableModel):
     def flags(self, index):
         if not index.isValid():
             return Qt.ItemFlag.ItemIsDropEnabled
-        return (
-            Qt.ItemFlag.ItemIsSelectable
-            | Qt.ItemFlag.ItemIsEnabled
-            | Qt.ItemFlag.ItemIsDragEnabled
-            | Qt.ItemFlag.ItemIsDropEnabled
-            | Qt.ItemFlag.ItemIsEditable
-        )
+        return (Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsDragEnabled | Qt.ItemFlag.ItemIsDropEnabled | Qt.ItemFlag.ItemIsEditable)
 
     def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
         if role != Qt.ItemDataRole.DisplayRole:
@@ -166,9 +160,7 @@ class DragDropPandasModel(QAbstractTableModel):
         drop_labels = [self.df.columns[c] for c in cols if 0 <= c < self.columnCount()]
         self.df = self.df.drop(columns=drop_labels)
         self.endResetModel()
-
     # ---------------- Drag/drop ----------------
-
     def mimeTypes(self):
         return [self.MIME_TYPE]
 
@@ -182,15 +174,7 @@ class DragDropPandasModel(QAbstractTableModel):
         if not rows or not cols:
             return mime
 
-        # We only need to transmit the source rect. Values come from the model itself.
-        payload = {
-            "v": 1,
-            "token": self._drag_token,
-            "r0": rows[0],
-            "r1": rows[-1],
-            "c0": cols[0],
-            "c1": cols[-1],
-        }
+        payload = {"v": 1,"token": self._drag_token,"r0": rows[0],"r1": rows[-1],"c0": cols[0],"c1": cols[-1],}
         mime.setData(self.MIME_TYPE, QByteArray(json.dumps(payload).encode("utf-8")))
         return mime
 
@@ -227,7 +211,6 @@ class DragDropPandasModel(QAbstractTableModel):
         height = (r1 - r0) + 1
         width = (c1 - c0) + 1
 
-        # Clamp destination so the block fits.
         max_row = max(0, self.rowCount() - height)
         max_col = max(0, self.columnCount() - width)
         dest_row = max(0, min(int(dest_row), max_row))
@@ -236,8 +219,6 @@ class DragDropPandasModel(QAbstractTableModel):
         self.beginResetModel()
         try:
             orig = self.df.copy()
-
-            # Compute move pairs for in-bounds cells only (keeps behavior stable).
             move_pairs = []
             for dr in range(height):
                 for dc in range(width):
@@ -253,12 +234,10 @@ class DragDropPandasModel(QAbstractTableModel):
                 return False
 
             self.push_undo_state()
-
-            # Copy source → dest
+            
             for (sr, sc), (tr, tc) in move_pairs:
                 self.df.iat[tr, tc] = orig.iat[sr, sc]
 
-            # Clear sources that did not overlap destination
             dest_set = {dst for (_, dst) in move_pairs}
             src_set = {src for (src, _) in move_pairs}
             for (sr, sc) in src_set:
@@ -271,14 +250,10 @@ class DragDropPandasModel(QAbstractTableModel):
 
     def supportedDropActions(self):
         return Qt.DropAction.MoveAction
-
-    # ---------------- Data access ----------------
-
+    
     def get_dataframe(self):
         return self.df.copy()
-
     # ---------------- Undo/redo ----------------
-
     def push_undo_state(self):
         self.undo_stack.append(self.df.copy())
         self.redo_stack.clear()
@@ -294,9 +269,7 @@ class DragDropPandasModel(QAbstractTableModel):
             self.undo_stack.append(self.df.copy())
             self.df = self.redo_stack.pop()
             self.layoutChanged.emit()
-
     # ---------------- Clipboard ops ----------------
-
     def copy_selection(self, indexes):
         if not indexes:
             return

@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import (QDialog,QWidget,QVBoxLayout,QHBoxLayout,QLabel,QListWidget,QPushButton,QRadioButton,QLineEdit,QGroupBox,QMessageBox,QToolButton)
+from PySide6.QtWidgets import QDialog,QWidget,QVBoxLayout,QHBoxLayout,QLabel,QListWidget,QPushButton,QRadioButton,QLineEdit,QGroupBox,QMessageBox,QToolButton
 
 class DropArea(QWidget):
     pathsDropped = Signal(list)

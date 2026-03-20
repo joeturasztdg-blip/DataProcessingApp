@@ -31,12 +31,7 @@ class PagerState:
     btn_down: QToolButton | None = None
 
 class ExtrasBinding:
-    def __init__(
-        self,
-        widgets_by_option: dict[Any, list[tuple[str, QWidget]]],
-        enabled_when: Callable[[], bool],
-        selected_value: Callable[[], Any],
-    ):
+    def __init__(self,widgets_by_option: dict[Any, list[tuple[str, QWidget]]],enabled_when: Callable[[], bool],selected_value: Callable[[], Any]):
         self.widgets_by_option = widgets_by_option
         self.enabled_when = enabled_when
         self.selected_value = selected_value

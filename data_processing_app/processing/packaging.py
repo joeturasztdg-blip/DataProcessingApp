@@ -7,7 +7,6 @@ import string
 import subprocess
 import sys
 
-
 class ZipEncryptor:
     def find_7zip(self):
         bundle = getattr(sys, "_MEIPASS", None)
@@ -17,11 +16,7 @@ class ZipEncryptor:
                 if os.path.isfile(p):
                     return p
 
-        for c in [
-            "7z",
-            "7za",
-            r"C:\Program Files\7-Zip\7z.exe",
-            r"C:\Program Files (x86)\7-Zip\7z.exe"]:
+        for c in ["7z","7za",r"C:\Program Files\7-Zip\7z.exe",r"C:\Program Files (x86)\7-Zip\7z.exe"]:
             p = shutil.which(c) or (c if os.path.isfile(c) else None)
             if p:
                 return p
@@ -49,12 +44,7 @@ class ZipEncryptor:
         if pw:
             cmd.extend([f"-p{pw}", "-mem=ZipCrypto"])
         try:
-            res = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                cwd=run_cwd
-            )
+            res = subprocess.run(cmd,capture_output=True,text=True,cwd=run_cwd)
         except OSError as e:
             if getattr(e, "winerror", None) == 740:
                 raise PermissionError("Permission Error") from None

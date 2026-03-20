@@ -74,16 +74,9 @@ class EcommerceDefaults:
         found.sort(key=lambda x: x[0])
         return [col for _, col in found]
 
-    def detect_address_range(
-        self,
-        columns: list[str],
-        *,
-        town_col: str | None = None,
-        county_col: str | None = None,
-        postcode_col: str | None = None,
-    ) -> tuple[str | None, str | None]:
+    def detect_address_range(self,columns: list[str],*,town_col: str | None = None,county_col: str | None = None,
+                             postcode_col: str | None = None,) -> tuple[str | None, str | None]:
         candidates: list[str] = []
-
         address_cols = self.detect_address_like_columns(columns)
         candidates.extend(address_cols)
 
@@ -110,12 +103,8 @@ class EcommerceDefaults:
             if match:
                 defaults[target_key] = match
 
-        start, end = self.detect_address_range(
-            columns,
-            town_col=defaults.get("town_column"),
-            county_col=defaults.get("county_column"),
-            postcode_col=defaults.get("postcode_column"),
-        )
+        start, end = self.detect_address_range(columns,town_col=defaults.get("town_column"),county_col=defaults.get("county_column"),
+                                               postcode_col=defaults.get("postcode_column"),)
         if start:
             defaults["address_start"] = start
         if end:

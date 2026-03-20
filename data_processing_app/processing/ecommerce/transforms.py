@@ -6,7 +6,6 @@ import pandas as pd
 
 from processing.repos.return_addresses_repo import ReturnAddressesRepository
 
-
 class EcommerceTransforms:
     def collapse_postcode_series(self, series: pd.Series) -> pd.Series:
         s = series.astype(str)
@@ -66,15 +65,7 @@ class EcommerceTransforms:
 
         return series.map(convert)
 
-    def apply_info_field(
-        self,
-        df: pd.DataFrame,
-        *,
-        mode: str | None,
-        source_column: str | None,
-        text_value: str | None,
-        output_column: str,
-    ) -> pd.DataFrame:
+    def apply_info_field(self,df: pd.DataFrame,*,mode: str | None,source_column: str | None,text_value: str | None,output_column: str) -> pd.DataFrame:
         out = df.copy()
 
         if mode == "a":
@@ -89,32 +80,30 @@ class EcommerceTransforms:
 
         return out
 
-    def populate_missing_town_from_county_or_address(
-        self,
-        df: pd.DataFrame,
-        *,
-        town_col: str,
-        county_col: str | None,
-        postcode_col: str,
-        preview_columns: list[str],
-    ) -> pd.DataFrame:
+    def populate_missing_town_from_county_or_address(self,df: pd.DataFrame,*,town_col: str,county_col: str | None,postcode_col: str,preview_columns: list[str]) -> pd.DataFrame:
         out = df.copy()
 
         if town_col not in out.columns:
             return out
 
-        county_exists = bool(
-            county_col
-            and county_col != "__select__"
-            and county_col in out.columns
-        )
+        county_exists = bool(county_col and county_col != "__select__" and county_col in out.columns)
+        address_fallback_cols = [c for c in preview_columns if c in out.columns and c not in {town_col, county_col, postcode_col}]
 
-        address_fallback_cols = [
-            c for c in preview_columns
-            if c in out.columns and c not in {town_col, county_col, postcode_col}
-        ]
+        address1_col = address_fallback_cols[0] if address_fallback_cols else None
 
         for row_index in out.index:
+            if address1_col:
+                current_address1 = out.at[row_index, address1_col]
+                if self.is_blank_value(current_address1):
+                    for src_col in address_fallback_cols[1:]:
+                        src_value = out.at[row_index, src_col]
+                        if self.is_blank_value(src_value):
+                            continue
+
+                        out.at[row_index, address1_col] = src_value
+                        out.at[row_index, src_col] = ""
+                        break
+
             current_town = out.at[row_index, town_col]
             if not self.is_blank_value(current_town):
                 continue
@@ -169,25 +158,11 @@ class EcommerceTransforms:
         out["Weight"] = multiplied
         return out
 
-    def apply_recipient_name(
-        self,
-        df: pd.DataFrame,
-        *,
-        name_mode: str | None,
-        name_column: str | None,
-        name_text: str | None,
-        surname_mode: str | None,
-        surname_column: str | None,
-        surname_text: str | None,
-    ) -> pd.DataFrame:
+    def apply_recipient_name(self,df: pd.DataFrame,*,name_mode: str | None,name_column: str |
+                             None,name_text: str | None,surname_mode: str | None,surname_column: str | None,surname_text: str | None,) -> pd.DataFrame:
         out = df.copy()
 
-        def resolve_series(
-            *,
-            mode: str | None,
-            source_column: str | None,
-            text_value: str | None,
-        ) -> pd.Series:
+        def resolve_series(*,mode: str | None,source_column: str | None,text_value: str | None,) -> pd.Series:
             if mode == "a" and source_column and source_column in out.columns:
                 return out[source_column].fillna("").astype(str).str.strip()
 
@@ -197,17 +172,8 @@ class EcommerceTransforms:
 
             return pd.Series([""] * len(out), index=out.index, dtype="object")
 
-        first = resolve_series(
-            mode=name_mode,
-            source_column=name_column,
-            text_value=name_text,
-        )
-
-        last = resolve_series(
-            mode=surname_mode,
-            source_column=surname_column,
-            text_value=surname_text,
-        )
+        first = resolve_series(mode=name_mode,source_column=name_column,text_value=name_text,)
+        last = resolve_series(mode=surname_mode,source_column=surname_column,text_value=surname_text,)
 
         recipient = first.where(last.eq(""), first + " " + last)
         recipient = recipient.fillna("").astype(str).str.strip()
@@ -243,25 +209,13 @@ class EcommerceTransforms:
             "Return Postcode": "" if pd.isna(row.get("postcode")) else str(row.get("postcode", "")).strip(),
         }
 
-    def apply_return_address(
-        self,
-        df: pd.DataFrame,
-        *,
-        selected_return_address: str | None,
-        return_addresses_repo: ReturnAddressesRepository,
-    ) -> pd.DataFrame:
+    def apply_return_address(self,df: pd.DataFrame,*,selected_return_address: str | None,return_addresses_repo: ReturnAddressesRepository) -> pd.DataFrame:
         selected = str(selected_return_address or "").strip()
         if not selected or selected == "__select__":
             return df
 
         matches = return_addresses_repo.search(selected, limit=100000)
-        chosen = next(
-            (
-                row for row in matches
-                if str(row.get("contact_name", "")).strip() == selected
-            ),
-            None,
-        )
+        chosen = next((row for row in matches if str(row.get("contact_name", "")).strip() == selected),None)
         if chosen is None:
             return df
 
@@ -270,5 +224,44 @@ class EcommerceTransforms:
 
         for col_name, value in values.items():
             out[col_name] = value
+
+        return out
+    
+    def apply_recipient_name(self,df: pd.DataFrame,*,name_mode: str | None,name_column: str | None,name_text: str |
+                             None,surname_mode: str | None,surname_column: str | None,surname_text: str | None,) -> pd.DataFrame:
+        out = df.copy()
+
+        def resolve_series(*,mode: str | None,source_column: str | None,text_value: str | None) -> pd.Series:
+            if mode == "a" and source_column and source_column in out.columns:
+                return out[source_column].fillna("").astype(str).str.strip()
+
+            if mode == "b":
+                value = str(text_value or "").strip()
+                return pd.Series([value] * len(out), index=out.index, dtype="object")
+
+            return pd.Series([""] * len(out), index=out.index, dtype="object")
+
+        first = resolve_series(mode=name_mode,source_column=name_column,text_value=name_text)
+        last = resolve_series(mode=surname_mode,source_column=surname_column,text_value=surname_text)
+
+        recipient = first.where(last.eq(""), first + " " + last)
+        recipient = recipient.fillna("").astype(str).str.strip()
+
+        if "Company" in out.columns:
+            company = out["Company"].fillna("").astype(str).str.strip()
+            recipient = recipient.where(recipient.ne(""), company)
+
+        out["Recipient Name"] = recipient
+
+        drop_cols: list[str] = []
+
+        if name_mode == "a" and name_column in out.columns:
+            drop_cols.append(name_column)
+
+        if surname_mode == "a" and surname_column in out.columns:
+            drop_cols.append(surname_column)
+
+        if drop_cols:
+            out.drop(columns=list(dict.fromkeys(drop_cols)), inplace=True)
 
         return out

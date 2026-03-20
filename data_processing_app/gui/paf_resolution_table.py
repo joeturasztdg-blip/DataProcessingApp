@@ -9,18 +9,13 @@ from PySide6.QtWidgets import QAbstractItemView
 from gui.pandas_model import DragDropPandasModel
 from gui.table import DragDropTableView
 
-
 class PAFResolutionTable(DragDropTableView):
     def __init__(self, parent=None):
         super().__init__(parent)
 
         self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
-        self.setEditTriggers(
-            QAbstractItemView.EditTrigger.DoubleClicked
-            | QAbstractItemView.EditTrigger.EditKeyPressed
-            | QAbstractItemView.EditTrigger.AnyKeyPressed
-        )
+        self.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.EditKeyPressed | QAbstractItemView.EditTrigger.AnyKeyPressed)
 
         self.verticalHeader().setVisible(False)
         self.horizontalHeader().setStretchLastSection(True)
@@ -61,16 +56,13 @@ class PAFResolutionTable(DragDropTableView):
 
     def keyPressEvent(self, event):
         model = self.model()
-
         if model is not None and event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
             model.clear_selection(self.selectedIndexes())
             event.accept()
             return
-
         super().keyPressEvent(event)
 
     def startDrag(self, supportedActions):
-        # reduced behavior: only allow drag/drop for a single selected cell
         if len(self.selectedIndexes()) != 1:
             return
         super().startDrag(supportedActions)

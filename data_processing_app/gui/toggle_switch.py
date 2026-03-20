@@ -52,11 +52,7 @@ class ToggleSwitch(QWidget):
         painter.drawRoundedRect(rect, radius, radius)
 
         y = (self.height() - self._thumb_diameter) / 2
-        x = (
-            self.width() - self._thumb_diameter - self._track_margin
-            if self._checked
-            else self._track_margin
-        )
+        x = (self.width() - self._thumb_diameter - self._track_margin if self._checked else self._track_margin)
 
         painter.setPen(QPen(QColor("#d1d5db"), 1))
         painter.setBrush(thumb)

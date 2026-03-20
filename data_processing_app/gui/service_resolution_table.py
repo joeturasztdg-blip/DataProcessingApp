@@ -3,16 +3,9 @@ from __future__ import annotations
 from typing import Iterable
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (
-    QAbstractItemView,
-    QHeaderView,
-    QTableWidget,
-    QTableWidgetItem,
-)
-
+from PySide6.QtWidgets import QAbstractItemView,QHeaderView,QTableWidget,QTableWidgetItem
 
 EDITABLE_COLUMNS = {"Length", "Width", "Height", "Weight", "Service"}
-
 
 def _make_item(text: str, *, editable: bool) -> QTableWidgetItem:
     item = QTableWidgetItem("" if text is None else str(text))
@@ -24,16 +17,8 @@ def _make_item(text: str, *, editable: bool) -> QTableWidgetItem:
     item.setFlags(flags)
     return item
 
-
 class ServiceResolutionTable(QTableWidget):
-    HEADERS = [
-        "Length",
-        "Width",
-        "Height",
-        "Weight",
-        "Service",
-        "Reject Reason",
-    ]
+    HEADERS = ["Length","Width","Height","Weight","Service","Reject Reason",]
 
     def __init__(self, parent=None):
         super().__init__(0, len(self.HEADERS), parent)
@@ -41,11 +26,7 @@ class ServiceResolutionTable(QTableWidget):
         self.setHorizontalHeaderLabels(self.HEADERS)
         self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
-        self.setEditTriggers(
-            QAbstractItemView.EditTrigger.DoubleClicked
-            | QAbstractItemView.EditTrigger.EditKeyPressed
-            | QAbstractItemView.EditTrigger.AnyKeyPressed
-        )
+        self.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.EditKeyPressed | QAbstractItemView.EditTrigger.AnyKeyPressed)
 
         self.verticalHeader().setVisible(False)
 

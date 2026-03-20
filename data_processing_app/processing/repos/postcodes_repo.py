@@ -41,11 +41,8 @@ class PostcodesRepository:
         return found
     
     def insert_postcode(self, postcode):
-
         postcode = postcode.strip().upper()
 
         with self._connect() as con:
-            con.execute(
-                "INSERT OR IGNORE INTO postcodes(postcode) VALUES (?)",
-                (postcode,)
-            )
+            con.execute("INSERT OR IGNORE INTO postcodes(postcode) VALUES (?)",(postcode,),)
+            con.commit()
