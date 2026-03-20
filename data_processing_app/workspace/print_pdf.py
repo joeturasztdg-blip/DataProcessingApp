@@ -1,4 +1,3 @@
-# workspace/print_pdf.py
 from __future__ import annotations
 
 import os
@@ -10,7 +9,7 @@ from config.schemas import PRINT_PDF_SCHEMA
 from gui.dialogs.options_dialog import OptionsDialog
 from gui.dialogs.printing_dialog import BatchPdfPrintDialog
 from processing.pdf_labels import append_label
-from utils.print_utils import print_to_specific_printer
+from utils.print_utils import move_pdf_to_folder, print_to_specific_printer
 
 
 class PrintPdf:
@@ -26,6 +25,8 @@ class PrintPdf:
         if dlg_opts.exec() != QDialog.Accepted:
             return
         print_opts = dlg_opts.get_results() or {}
+
+        printed_dir = os.path.join(os.path.dirname(pdfs[0]), "Printed")
 
         dlg = BatchPdfPrintDialog(pdfs, parent=self.mw)
 
@@ -53,15 +54,27 @@ class PrintPdf:
                     progress(idx - 1, total, f"Printing {idx}/{total}: {name} → {printer}")
 
                     final_pdf = append_label(pdf, enabled_label)
+                    moved_to = None
+
                     try:
                         print_to_specific_printer(final_pdf, printer)
+                        moved_to = move_pdf_to_folder(pdf, printed_dir)
                     finally:
                         if final_pdf and final_pdf != pdf:
                             try:
                                 os.remove(final_pdf)
                             except Exception:
                                 pass
-                    progress(idx, total, f"Sent {idx}/{total}: {name} → {printer}")
+
+                    if moved_to:
+                        progress(
+                            idx,
+                            total,
+                            f"Sent {idx}/{total}: {name} → {printer} | moved to {os.path.basename(moved_to)}",
+                        )
+                    else:
+                        progress(idx, total, f"Sent {idx}/{total}: {name} → {printer}")
+
                 return True
 
             def on_done(_res):

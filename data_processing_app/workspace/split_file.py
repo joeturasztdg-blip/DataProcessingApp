@@ -95,19 +95,18 @@ class SplitFile(BaseWorkflow):
                     return out
 
                 def apply_seeds_mode(dfs: list, *, base_df_cols: int):
-                    seed_mode_opts = opts.get("seeds_mode", {}) or {}
-                    seed_mode = seed_mode_opts.get("value", "none")  # none | file1 | all
+                    seed_mode = opts.get("seeds_mode", "none")  # none | file1 | all
                     if seed_mode == "none":
                         return dfs
 
                     try:
                         rows_to_add = []
 
-                        std_id = seed_mode_opts.get("standard_seed")
+                        std_id = opts.get("standard_seed")
                         if std_id:
                             rows_to_add += self.mw.s.seeds_repo.get_seed_rows(std_id)
 
-                        bes_id = seed_mode_opts.get("bespoke_seed")
+                        bes_id = opts.get("bespoke_seed")
                         if bes_id and bes_id != "__none__":
                             rows_to_add += self.mw.s.seeds_repo.get_seed_rows(bes_id)
 
@@ -132,7 +131,6 @@ class SplitFile(BaseWorkflow):
                         msg = str(e).strip() or "Append seeds failed"
                         self.mw.s.logger.log(msg, "red")
                         return None
-
                 # ==================================================
                 # Build schema
                 # ==================================================

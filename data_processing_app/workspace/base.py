@@ -102,13 +102,7 @@ class BaseWorkflow:
             suffix = f' (Encoding: {enc_label})' if enc_label else ""
             self.info(f"{success_msg}{suffix}", "green")
 
-        return self.busy(
-            title,
-            "Saving file…",
-            job_save,
-            on_done=done,
-            on_err=lambda e: QMessageBox.critical(self.mw, "Save Error", e),
-        )
+        return self.busy(title,"Saving file…",job_save,on_done=done,on_err=lambda e: QMessageBox.critical(self.mw, "Save Error", e),)
 
     def run_busy(self,title: str,message: str,fn: Callable[[], Any],*,success_msg: Optional[str] = None,on_done: Optional[DoneHandler] = None,
                  on_err: Optional[ErrHandler] = None,cancelable: bool = False):

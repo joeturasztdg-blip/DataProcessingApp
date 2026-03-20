@@ -16,11 +16,13 @@ from processing.repos.services_repo import ServicesRepository
 from workspace.base import BaseWorkflow
 
 from config.schemas import build_create_ecommerce_file_schema
+from config.constants import FIELD_LENGTH_COLUMNS, FIELD_LENGTH_LIMIT
 
 from gui.dialogs.options_dialog import OptionsDialog
 from gui.dialogs.paf_resolution_dialog import PAFResolutionDialog
 from gui.dialogs.recipient_name_resolution_dialog import RecipientNameResolutionDialog
 from gui.dialogs.service_resolution_dialog import ServiceResolutionDialog
+from gui.dialogs.field_length_resolution_dialog import FieldLengthResolutionDialog
 
 
 def _validate_info_field(
@@ -188,6 +190,10 @@ class CreateEcommerceFile(BaseWorkflow):
                     working_df,
                     use_max_service_dimensions=use_max_service_dimensions,
                 )
+                if working_df is None:
+                    return
+
+                working_df = self._run_field_length_resolution_warning(working_df)
                 if working_df is None:
                     return
 
@@ -861,6 +867,123 @@ class CreateEcommerceFile(BaseWorkflow):
 
             if reject_df is not None and not reject_df.empty:
                 all_recipient_rejects.append(reject_df)
+
+    def _collect_field_length_resolution_state(
+        self,
+        df: pd.DataFrame,
+    ) -> dict[str, Any]:
+        resolution_indices: list[int] = []
+        rows: list[dict[str, str]] = []
+
+        available_columns = [col for col in FIELD_LENGTH_COLUMNS if col in df.columns]
+        if not available_columns:
+            return {
+                "resolution_indices": [],
+                "rows": [],
+            }
+
+        for idx, row in df.iterrows():
+            row_data: dict[str, str] = {}
+            too_long: list[str] = []
+
+            for col in FIELD_LENGTH_COLUMNS:
+                value = ""
+                if col in df.columns:
+                    raw = row.get(col)
+                    value = "" if pd.isna(raw) else str(raw).strip()
+
+                row_data[col] = value
+
+                if value and len(value) > FIELD_LENGTH_LIMIT:
+                    too_long.append(f"{col} ({len(value)})")
+
+            if not too_long:
+                continue
+
+            row_data["Reject Reason"] = (
+                f"Will be truncated on label ({FIELD_LENGTH_LIMIT} max): "
+                + ", ".join(too_long)
+            )
+            resolution_indices.append(int(idx))
+            rows.append(row_data)
+
+        return {
+            "resolution_indices": resolution_indices,
+            "rows": rows,
+        }
+
+    def _run_field_length_resolution_dialog_if_needed(
+        self,
+        *,
+        resolution_state: dict[str, Any],
+    ) -> tuple[str, list[dict[str, str]]] | None:
+        if not resolution_state["rows"]:
+            return ("continue", [])
+
+        dlg = FieldLengthResolutionDialog(
+            resolution_state["rows"],
+            parent=self.mw,
+        )
+        if not dlg.exec():
+            return None
+
+        return dlg.dialog_action(), dlg.result_rows()
+
+    def _apply_field_length_resolution_result(
+        self,
+        df: pd.DataFrame,
+        *,
+        resolution_indices: list[int],
+        edited_rows: list[dict[str, str]],
+    ) -> pd.DataFrame:
+        out = df.copy()
+
+        for row_pos, df_index in enumerate(resolution_indices):
+            if row_pos >= len(edited_rows):
+                continue
+
+            if df_index not in out.index:
+                continue
+
+            edited = edited_rows[row_pos]
+
+            for col in FIELD_LENGTH_COLUMNS:
+                if col not in out.columns:
+                    continue
+                out.loc[df_index, col] = "" if pd.isna(edited.get(col)) else str(edited.get(col)).strip()
+
+        out.reset_index(drop=True, inplace=True)
+        return out
+
+    def _run_field_length_resolution_warning(
+        self,
+        df: pd.DataFrame,
+    ) -> pd.DataFrame | None:
+        working_df = df.copy()
+
+        resolution_state = self._collect_field_length_resolution_state(working_df)
+        if not resolution_state["rows"]:
+            return working_df
+
+        result = self._run_field_length_resolution_dialog_if_needed(
+            resolution_state=resolution_state,
+        )
+        if result is None:
+            return None
+
+        action, edited_rows = result
+
+        if action == "continue":
+            return working_df
+
+        if action == "update":
+            return self._apply_field_length_resolution_result(
+                working_df,
+                resolution_indices=resolution_state["resolution_indices"],
+                edited_rows=edited_rows,
+            )
+
+        return working_df
 
     def _build_batched_output_paths(
         self,
